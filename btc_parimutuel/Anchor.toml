@@ -6,7 +6,10 @@ resolution = true
 skip-lint = false
 
 [programs.localnet]
-btc_parimutuel = "8mhFdjgLv8LvDpm53LvZZGpTfSXiAnUThkDkNZFzyM6A"
+btc_parimutuel = "BQoBdzBdmRxkMBLwZnJ7fvtvsTwmvcFTA8H3TPk6iod"
+
+[programs.devnet]
+btc_parimutuel = "BQoBdzBdmRxkMBLwZnJ7fvtvsTwmvcFTA8H3TPk6iod"
 
 [registry]
 url = "https://api.apr.dev"

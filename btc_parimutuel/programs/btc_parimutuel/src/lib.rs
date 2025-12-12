@@ -1,7 +1,7 @@
 use anchor_lang::prelude::*;
 use anchor_spl::token::{transfer, Token, TokenAccount, Transfer, Mint};
 
-declare_id!("8mhFdjgLv8LvDpm53LvZZGpTfSXiAnUThkDkNZFzyM6A");
+declare_id!("BQoBdzBdmRxkMBLwZnJ7fvtvsTwmvcFTA8H3TPk6iod");
 
 // ============================================================================
 // ERROR CODES
