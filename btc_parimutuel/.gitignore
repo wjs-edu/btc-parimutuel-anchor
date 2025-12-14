@@ -5,3 +5,8 @@ target
 node_modules
 test-ledger
 .yarn
+
+# local debug artifacts
+*.bak
+scripts/
+Cargo.lock
