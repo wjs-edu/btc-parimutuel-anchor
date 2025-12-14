@@ -1,7 +1,7 @@
 use anchor_lang::prelude::*;
-use anchor_spl::token::{transfer, Token, TokenAccount, Transfer, Mint};
+use anchor_spl::token::{self, Token, TokenAccount, Mint};
 
-declare_id!("BQoBdzBdmRxkMBLwZnJ7fvtvsTwmvcFTA8H3TPk6iod");
+declare_id!("QvRjL6RbUCg1pCxskrxBpiuoJ94iEghWddwYipjAQpz");
 
 // ============================================================================
 // ERROR CODES
@@ -49,7 +49,8 @@ pub enum ErrorCode {
 #[account]
 pub struct Market {
     // Authorities
-    pub admin: Pubkey,              // admin that can initialize and resolve
+    pub admin: Pubkey,
+    pub market_id: u64,              // admin that can initialize and resolve
     pub creator: Pubkey,            // creator wallet (rev-share)
     pub creator_fee_vault: Pubkey,  // creator's USDC SPL token account
 
@@ -98,7 +99,7 @@ pub struct Bet {
 // ============================================================================
 
 #[derive(Accounts)]
-#[instruction(resolution_ts: i64, reference_price: u64, reference_price_decimals: u8, fee_bps: u16, platform_fee_bps: u16, creator: Pubkey)]
+#[instruction(market_id: u64, resolution_ts: i64, reference_price: u64, reference_price_decimals: u8, fee_bps: u16, platform_fee_bps: u16, creator: Pubkey)]
 pub struct InitializeMarket<'info> {
     #[account(mut)]
     pub admin: Signer<'info>,
@@ -106,7 +107,7 @@ pub struct InitializeMarket<'info> {
     #[account(
         init_if_needed,
         payer = admin,
-        seeds = [b"market"],
+        seeds = [b"market".as_ref(), market_id.to_le_bytes().as_ref()],
         bump,
         space = 8 + std::mem::size_of::<Market>()
     )]
@@ -131,7 +132,7 @@ pub struct InitializeMarket<'info> {
 }
 
 #[derive(Accounts)]
-#[instruction(direction: u8, amount: u64)]
+#[instruction(market_id: u64, direction: u8, amount: u64)]
 pub struct PlaceBet<'info> {
     #[account(mut)]
     pub user: Signer<'info>,
@@ -143,7 +144,7 @@ pub struct PlaceBet<'info> {
     )]
     pub user_usdc_ata: Account<'info, TokenAccount>,
 
-    #[account(mut, seeds = [b"market"], bump = market.bump)]
+    #[account(mut, seeds = [b"market".as_ref(), market_id.to_le_bytes().as_ref()], bump = market.bump)]
     pub market: Account<'info, Market>,
 
     #[account(
@@ -170,11 +171,11 @@ pub struct PlaceBet<'info> {
 }
 
 #[derive(Accounts)]
-#[instruction(outcome: u8)]
+#[instruction(market_id: u64, outcome: u8)]
 pub struct ResolveMarket<'info> {
     pub admin: Signer<'info>,
 
-    #[account(mut, seeds = [b"market"], bump = market.bump)]
+    #[account(mut, seeds = [b"market".as_ref(), market_id.to_le_bytes().as_ref()], bump = market.bump)]
     pub market: Account<'info, Market>,
 
     #[account(
@@ -202,11 +203,12 @@ pub struct ResolveMarket<'info> {
 }
 
 #[derive(Accounts)]
+#[instruction(market_id: u64)]
 pub struct ClaimPayout<'info> {
     #[account(mut)]
     pub user: Signer<'info>,
 
-    #[account(mut, seeds = [b"market"], bump = market.bump)]
+    #[account(mut, seeds = [b"market".as_ref(), market_id.to_le_bytes().as_ref()], bump = market.bump)]
     pub market: Account<'info, Market>,
 
     #[account(
@@ -245,6 +247,7 @@ pub mod btc_parimutuel {
     /// Initialize or reset the market
     pub fn initialize_market(
         ctx: Context<InitializeMarket>,
+        market_id: u64,
         resolution_ts: i64,
         reference_price: u64,
         reference_price_decimals: u8,
@@ -253,6 +256,8 @@ pub mod btc_parimutuel {
         creator: Pubkey,
     ) -> Result<()> {
         let market = &mut ctx.accounts.market;
+
+        
         let admin = &ctx.accounts.admin;
         let clock = Clock::get()?;
 
@@ -271,6 +276,7 @@ pub mod btc_parimutuel {
 
         // Initialize market state
         market.admin = admin.key();
+        market.market_id = market_id;
         market.creator = creator;
         market.creator_fee_vault = ctx.accounts.creator_fee_vault.key();
         market.status = 1; // OPEN
@@ -294,6 +300,7 @@ pub mod btc_parimutuel {
     /// Place a bet on the market
     pub fn place_bet(
         ctx: Context<PlaceBet>,
+        market_id: u64,
         direction: u8,
         amount: u64,
     ) -> Result<()> {
@@ -345,14 +352,14 @@ pub mod btc_parimutuel {
         }
 
         // Transfer USDC from user to vault
-        let cpi_accounts = Transfer {
+        let cpi_accounts = token::Transfer {
             from: ctx.accounts.user_usdc_ata.to_account_info(),
             to: ctx.accounts.usdc_vault.to_account_info(),
             authority: ctx.accounts.user.to_account_info(),
         };
         let cpi_program = ctx.accounts.token_program.to_account_info();
         let cpi_ctx = CpiContext::new(cpi_program, cpi_accounts);
-        transfer(cpi_ctx, amount)?;
+        token::transfer(cpi_ctx, amount)?;
 
         Ok(())
     }
@@ -360,6 +367,7 @@ pub mod btc_parimutuel {
     /// Resolve the market with the final outcome
     pub fn resolve_market(
         ctx: Context<ResolveMarket>,
+        market_id: u64,
         outcome: u8,
     ) -> Result<()> {
         let market = &mut ctx.accounts.market;
@@ -406,30 +414,30 @@ pub mod btc_parimutuel {
 
         // Transfer platform fee
         if platform_fee > 0 {
-            let cpi_accounts = Transfer {
+            let cpi_accounts = token::Transfer {
                 from: ctx.accounts.usdc_vault.to_account_info(),
                 to: ctx.accounts.fee_vault.to_account_info(),
                 authority: market.to_account_info(),
             };
             let cpi_program = ctx.accounts.token_program.to_account_info();
-            let seeds = &[b"market".as_ref(), &[market.bump]];
+            let seeds = &[b"market".as_ref(), &market.market_id.to_le_bytes(), &[market.bump]];
             let signer_seeds = &[&seeds[..]];
             let cpi_ctx = CpiContext::new_with_signer(cpi_program, cpi_accounts, signer_seeds);
-            transfer(cpi_ctx, platform_fee)?;
+            token::transfer(cpi_ctx, platform_fee)?;
         }
 
         // Transfer creator fee
         if creator_fee > 0 {
-            let cpi_accounts = Transfer {
+            let cpi_accounts = token::Transfer {
                 from: ctx.accounts.usdc_vault.to_account_info(),
                 to: ctx.accounts.creator_fee_vault.to_account_info(),
                 authority: market.to_account_info(),
             };
             let cpi_program = ctx.accounts.token_program.to_account_info();
-            let seeds = &[b"market".as_ref(), &[market.bump]];
+            let seeds = &[b"market".as_ref(), &market.market_id.to_le_bytes(), &[market.bump]];
             let signer_seeds = &[&seeds[..]];
             let cpi_ctx = CpiContext::new_with_signer(cpi_program, cpi_accounts, signer_seeds);
-            transfer(cpi_ctx, creator_fee)?;
+            token::transfer(cpi_ctx, creator_fee)?;
         }
 
         // Update market state
@@ -440,8 +448,12 @@ pub mod btc_parimutuel {
     }
 
     /// Claim payout for a winning bet
-    pub fn claim_payout(ctx: Context<ClaimPayout>) -> Result<()> {
+    pub fn claim_payout(ctx: Context<ClaimPayout>, market_id: u64) -> Result<()> {
         let market = &ctx.accounts.market;
+
+        if market.market_id != 0 {
+            require_eq!(market.market_id, market_id, ErrorCode::Unauthorized);
+        }
         let bet = &mut ctx.accounts.bet;
 
         // Validation
@@ -472,16 +484,16 @@ pub mod btc_parimutuel {
             .ok_or(ErrorCode::MathOverflow)? as u64;
 
         // Transfer payout to user
-        let cpi_accounts = Transfer {
+        let cpi_accounts = token::Transfer {
             from: ctx.accounts.usdc_vault.to_account_info(),
             to: ctx.accounts.user_usdc_ata.to_account_info(),
             authority: market.to_account_info(),
         };
         let cpi_program = ctx.accounts.token_program.to_account_info();
-        let seeds = &[b"market".as_ref(), &[market.bump]];
+        let seeds = &[b"market".as_ref(), &market.market_id.to_le_bytes(), &[market.bump]];
         let signer_seeds = &[&seeds[..]];
         let cpi_ctx = CpiContext::new_with_signer(cpi_program, cpi_accounts, signer_seeds);
-        transfer(cpi_ctx, payout)?;
+        token::transfer(cpi_ctx, payout)?;
 
         // Mark bet as claimed
         bet.claimed = true;
