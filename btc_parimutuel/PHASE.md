@@ -11,3 +11,9 @@ anchor test --skip-local-validator --provider.cluster devnet --skip-deploy
 
 # Next: Phase A — vFinal Commitment Window + batch open/cancel (NOT STARTED)
 Not allowed until Phase 0 remains green and Phase A plan is checked in.
+
+# Phase A — STARTED (A1 only)
+Allowed now:
+- A1: Market publish + parameter lock (see docs/phase-a/A1_market_publish.md)
+Rule:
+- Phase 0 green must remain green at all times.
