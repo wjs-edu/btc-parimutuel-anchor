@@ -1,8 +1,7 @@
 # Phase A2 — Commitment Window (Commit Instruction Only)
 
 Gate: A2_COMMIT_ONLY — APPROVED
-Status: DRAFT
-Phase: A2
+Status: IMPLEMENTED + PROVEN GREENPhase: A2
 Invariant Level: Trust-Critical (STOP-THE-LINE)
 
 ## Scope (Exactly This)
