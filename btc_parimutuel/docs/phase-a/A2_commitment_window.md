@@ -1,6 +1,6 @@
 # Phase A2 — Commitment Window (Commit Instruction Only)
 
-Gate: A2_COMMIT_ONLY — NOT APPROVED (docs-only)
+Gate: A2_COMMIT_ONLY — APPROVED
 Status: DRAFT
 Phase: A2
 Invariant Level: Trust-Critical (STOP-THE-LINE)
