@@ -47,3 +47,20 @@ pub struct VFinalCommitment {
   pub bump: u8,
   pub _reserved: [u8; 32],
 }
+
+impl VFinalMarket {
+  pub fn a4_is_settled(&self) -> bool {
+    self._reserved[0] == 1
+  }
+
+  pub fn a4_outcome(&self) -> u8 {
+    self._reserved[1]
+  }
+
+  pub fn a4_settle(&mut self, outcome: u8, settled_at: i64) {
+    self._reserved[0] = 1;
+    self._reserved[1] = outcome;
+    let b = settled_at.to_le_bytes();
+    self._reserved[8..16].copy_from_slice(&b);
+  }
+}

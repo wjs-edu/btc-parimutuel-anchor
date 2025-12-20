@@ -67,6 +67,11 @@ pub enum ErrorCode {
     SideSwitchForbidden,
     #[msg("Dominance cap exceeded.")]
     DominanceCapExceeded,
+      // A4: batch settle
+      #[msg("Too early to settle (commit window not closed).")]
+      TooEarlyToSettle,
+      #[msg("Commit-close already settled.")]
+      AlreadySettled,
 }
 
 // ============================================================================
@@ -323,7 +328,29 @@ pub mod btc_parimutuel {
         Ok(())
     }
 
-    pub fn commit_vfinal(ctx: Context<CommitVFinal>, market_id: u64, side: u8, amount: u64) -> Result<()> {
+    
+    pub fn settle_commit_close_vfinal(
+        ctx: Context<SettleCommitCloseVFinal>,
+        _market_id: u64,
+    ) -> Result<()> {
+        let m = &mut ctx.accounts.market;
+        let clock = Clock::get()?;
+
+        require!(clock.unix_timestamp >= m.commit_close_ts, ErrorCode::TooEarlyToSettle);
+        require!(!m.a4_is_settled(), ErrorCode::AlreadySettled);
+
+        // Consistency: commit_pool must belong to this market
+        require!(ctx.accounts.commit_pool.market == m.key(), ErrorCode::MarketNotPublished);
+
+        let threshold: u128 = (m.min_to_open_usd as u128) * 1_000_000u128;
+        let total: u128 = ctx.accounts.commit_pool.total_committed as u128;
+        let outcome: u8 = if total >= threshold { 1 } else { 2 }; // 1=OPEN, 2=CANCEL
+
+        m.a4_settle(outcome, clock.unix_timestamp);
+        Ok(())
+    }
+
+pub fn commit_vfinal(ctx: Context<CommitVFinal>, market_id: u64, side: u8, amount: u64) -> Result<()> {
         let clock = Clock::get()?;
         let m = &ctx.accounts.market;
 
@@ -641,6 +668,15 @@ pub mod btc_parimutuel {
 
 #[derive(Accounts)]
 #[instruction(market_id: u64)]
+pub struct SettleCommitCloseVFinal<'info> {
+  #[account(mut)]
+  pub market: Account<'info, VFinalMarket>,
+  pub commit_pool: Account<'info, VFinalCommitPool>,
+}
+
+#[derive(Accounts)]
+#[instruction(market_id: u64)]
+
 pub struct CommitVFinal<'info> {
   #[account(mut)]
   pub user: Signer<'info>,

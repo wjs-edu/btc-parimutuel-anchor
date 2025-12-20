@@ -18,6 +18,12 @@ pub enum ErrorCode {
     #[msg("Dominance cap exceeded.")]
     DominanceCapExceeded,
 
+  // A4: Batch settle
+  #[msg("Too early to settle (commit window not closed).")]
+  TooEarlyToSettle,
+  #[msg("Commit-close already settled.")]
+  AlreadySettled,
+
 }
 
 // ==========================
