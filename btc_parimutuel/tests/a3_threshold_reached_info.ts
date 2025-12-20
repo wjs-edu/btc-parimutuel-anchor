@@ -3,6 +3,7 @@ import { PublicKey, SystemProgram, Keypair, LAMPORTS_PER_SOL } from "@solana/web
 import { createMint, getOrCreateAssociatedTokenAccount, mintTo, getAccount, TOKEN_PROGRAM_ID } from "@solana/spl-token";
 import assert from "assert";
 import { isThresholdReachedInfo } from "./utils/a3_threshold";
+import { rpcRetry, sendAndConfirmRetry } from "./utils/rpc";
 
 function sleep(ms: number) { return new Promise((r) => setTimeout(r, ms)); }
 async function rpcRetry<T>(fn: () => Promise<T>, retries = 10) {
@@ -47,7 +48,7 @@ describe("A3 threshold reached (informational only)", () => {
     const fundTx = new anchor.web3.Transaction().add(
       SystemProgram.transfer({ fromPubkey: admin, toPubkey: userB.publicKey, lamports: Math.floor(0.05 * LAMPORTS_PER_SOL) })
     );
-    await rpcRetry(() => provider.sendAndConfirm(fundTx, [], { commitment: "confirmed" }));
+    await sendAndConfirmRetry(provider, fundTx, [], { commitment: "confirmed" });
     const ataB = await getOrCreateAssociatedTokenAccount(connection, payer, usdcMint, userB.publicKey);
     await mintTo(connection, payer, usdcMint, ataB.address, admin, 10_000_000);
     const now = Math.floor(Date.now() / 1000);
