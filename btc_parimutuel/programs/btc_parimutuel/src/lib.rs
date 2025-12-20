@@ -3,6 +3,9 @@ use anchor_spl::token::{self, Token, TokenAccount, Mint};
 
 declare_id!("QvRjL6RbUCg1pCxskrxBpiuoJ94iEghWddwYipjAQpz");
 
+pub mod state;
+use crate::state::*;
+
 // ============================================================================
 // ERROR CODES
 // ============================================================================
@@ -38,6 +41,18 @@ pub enum ErrorCode {
     
     #[msg("Math overflow")]
     MathOverflow,
+
+    #[msg("Market already published")]
+    AlreadyPublished,
+
+    #[msg("Invalid market variant")]
+    InvalidVariant,
+
+    #[msg("Invalid commitment window")]
+    BadCommitWindow,
+
+    #[msg("Invalid resolution timestamp")]
+    BadResolutionTime,
 }
 
 // ============================================================================
@@ -244,11 +259,56 @@ pub struct ClaimPayout<'info> {
 // PROGRAM
 // ============================================================================
 
+#[derive(AnchorSerialize, AnchorDeserialize, Clone)]
+pub struct PublishMarketArgs {
+  pub variant: u8,
+  pub creator: Pubkey,
+  pub commit_open_ts: i64,
+  pub commit_close_ts: i64,
+  pub resolution_ts: i64,
+  pub override_min_to_open_usd: Option<u64>,
+  pub override_bet_cutoff_ts: Option<i64>,
+}
+
+#[derive(Accounts)]
+#[instruction(market_id: u64)]
+pub struct PublishMarketVFinal<'info> {
+  #[account(mut)]
+  pub admin: Signer<'info>,
+
+  #[account(
+    init_if_needed,
+    payer = admin,
+    space = 8 + std::mem::size_of::<VFinalMarket>(),
+    seeds = [b"market_v1".as_ref(), market_id.to_le_bytes().as_ref()],
+    bump
+  )]
+  pub market: Account<'info, VFinalMarket>,
+
+  pub system_program: Program<'info, System>,
+}
+
 #[program]
 pub mod btc_parimutuel {
     use super::*;
 
-    /// Initialize or reset the market
+    
+
+    pub fn publish_market_vfinal(ctx: Context<PublishMarketVFinal>, market_id: u64, args: PublishMarketArgs) -> Result<()> {
+        let m = &mut ctx.accounts.market;
+        require!(!m.published, ErrorCode::AlreadyPublished);
+        require!(args.variant <= 3, ErrorCode::InvalidVariant);
+        require!(args.commit_open_ts < args.commit_close_ts, ErrorCode::BadCommitWindow);
+        require!(args.commit_close_ts < args.resolution_ts, ErrorCode::BadResolutionTime);
+        let min_to_open = args.override_min_to_open_usd.unwrap_or(match args.variant { 0=>25_000, 1=>50_000, 2=>100_000, _=>150_000 });
+        let cap_bps: u16 = match args.variant { 0|1 => 1000, _ => 1250 };
+        let bet_cutoff = if args.variant==0 { args.commit_close_ts } else { args.override_bet_cutoff_ts.unwrap_or(args.commit_close_ts + 12*60*60) };
+        m.published=true; m.market_id=market_id; m.variant=args.variant; m.admin=ctx.accounts.admin.key(); m.creator=args.creator;
+        m.commit_open_ts=args.commit_open_ts; m.commit_close_ts=args.commit_close_ts; m.min_to_open_usd=min_to_open; m.dominance_cap_bps=cap_bps;
+        m.bet_cutoff_ts=bet_cutoff; m.resolution_ts=args.resolution_ts; m.published_at=Clock::get()?.unix_timestamp; m.bump=ctx.bumps.market;
+        Ok(())
+    }
+/// Initialize or reset the market
     pub fn initialize_market(
         ctx: Context<InitializeMarket>,
         market_id: u64,

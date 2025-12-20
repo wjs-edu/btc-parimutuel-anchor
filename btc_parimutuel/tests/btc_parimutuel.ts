@@ -6,7 +6,7 @@ import { createMint, getOrCreateAssociatedTokenAccount, mintTo, TOKEN_PROGRAM_ID
 process.env.ANCHOR_PROVIDER_URL = process.env.ANCHOR_PROVIDER_URL || "https://api.devnet.solana.com";
 process.env.ANCHOR_WALLET = process.env.ANCHOR_WALLET || (process.env.HOME + "/.config/solana/id.json");
 
-async function rpcRetry<T>(fn: () => Promise<T>, tries = 3) {
+async function rpcRetry<T>(fn: () => Promise<T>, tries = 6) {
   let lastErr: any;
   for (let i = 0; i < tries; i++) {
     try { return await fn(); }
