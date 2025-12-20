@@ -10,3 +10,7 @@ test-ledger
 *.bak
 scripts/
 Cargo.lock
+
+# local backups
+.bak/
+*.bak_*

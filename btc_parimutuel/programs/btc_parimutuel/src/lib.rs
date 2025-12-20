@@ -79,6 +79,10 @@ pub struct Market {
     pub usdc_vault: Pubkey,         // SPL token account owned by the Market PDA, holds pooled USDC
     pub usdc_mint: Pubkey,          // USDC mint for safety
 
+    // Resolve-settlement (order-independent payouts)
+    pub settled_pool: u64,          // fixed distributable pool after fees, set at resolve
+    pub total_winning_at_resolve: u64, // fixed winning-side total, set at resolve
+
     // PDA bump
     pub bump: u8,
 }
@@ -440,9 +444,13 @@ pub mod btc_parimutuel {
             token::transfer(cpi_ctx, creator_fee)?;
         }
 
-        // Update market state
-        market.resolved_outcome = outcome;
-        market.status = 2; // RESOLVED
+        // Freeze settlement values (order-independent payouts)
+    market.total_winning_at_resolve = if outcome == 1 { market.total_up } else { market.total_down };
+    market.settled_pool = _distributable_pool;
+
+    // Update market state
+    market.resolved_outcome = outcome;
+    market.status = 2; // RESOLVED
 
         Ok(())
     }
@@ -467,13 +475,9 @@ pub mod btc_parimutuel {
         );
 
         // Calculate payout
-        let distributable_pool: u64 = ctx.accounts.usdc_vault.amount;
+        let distributable_pool: u64 = market.settled_pool;
 
-        let total_winning: u64 = if market.resolved_outcome == 1 {
-            market.total_up
-        } else {
-            market.total_down
-        };
+        let total_winning: u64 = market.total_winning_at_resolve;
 
         require!(total_winning > 0, ErrorCode::NoWinningPool);
 
