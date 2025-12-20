@@ -16,3 +16,9 @@ Acceptance:
 - On-chain rejects any param mutation after publish.
 - Phase 0 green stays green:
   anchor test --skip-local-validator --provider.cluster devnet --skip-deploy
+
+## Publish-time immutable fields (A1 must write once)
+Identity: market_id, family/variant, admin, creator, usdc_mint, vaults
+Ladder params: min_to_open, dominance_cap_bps, commit_open_ts, commit_close_ts, bet_cutoff_ts, fee_bps, platform_fee_bps
+State: Draft -> CommitmentWindowOpen only; params immutable after publish
+Green: Phase 0 stays green (anchor test --skip-local-validator --provider.cluster devnet --skip-deploy)
