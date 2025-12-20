@@ -53,6 +53,20 @@ pub enum ErrorCode {
 
     #[msg("Invalid resolution timestamp")]
     BadResolutionTime,
+
+    // A2: commitment
+    #[msg("Market not published.")]
+    MarketNotPublished,
+    #[msg("Commitment window not open.")]
+    CommitmentWindowNotOpen,
+    #[msg("Commitment window closed.")]
+    CommitmentWindowClosed,
+    #[msg("Invalid side.")]
+    InvalidSide,
+    #[msg("Side switching is forbidden during commitment.")]
+    SideSwitchForbidden,
+    #[msg("Dominance cap exceeded.")]
+    DominanceCapExceeded,
 }
 
 // ============================================================================
@@ -308,6 +322,61 @@ pub mod btc_parimutuel {
         m.bet_cutoff_ts=bet_cutoff; m.resolution_ts=args.resolution_ts; m.published_at=Clock::get()?.unix_timestamp; m.bump=ctx.bumps.market;
         Ok(())
     }
+
+    pub fn commit_vfinal(ctx: Context<CommitVFinal>, market_id: u64, side: u8, amount: u64) -> Result<()> {
+        let clock = Clock::get()?;
+        let m = &ctx.accounts.market;
+
+        require!(side == 1 || side == 2, ErrorCode::InvalidSide);
+        require!(amount > 0, ErrorCode::AmountMustBePositive);
+
+        require!(clock.unix_timestamp >= m.commit_open_ts, ErrorCode::CommitmentWindowNotOpen);
+        require!(clock.unix_timestamp < m.commit_close_ts, ErrorCode::CommitmentWindowClosed);
+
+        if ctx.accounts.commit_pool.market == Pubkey::default() {
+            ctx.accounts.commit_pool.market = m.key();
+            ctx.accounts.commit_pool.usdc_mint = ctx.accounts.usdc_mint.key();
+            ctx.accounts.commit_pool.commit_vault = ctx.accounts.commit_vault.key();
+            ctx.accounts.commit_pool.total_committed = 0;
+            ctx.accounts.commit_pool.total_up = 0;
+            ctx.accounts.commit_pool.total_down = 0;
+            ctx.accounts.commit_pool.bump = ctx.bumps.commit_pool;
+            ctx.accounts.commit_pool.vault_bump = ctx.bumps.commit_vault;
+        }
+
+        if ctx.accounts.commitment.amount > 0 {
+            require!(ctx.accounts.commitment.side == side, ErrorCode::SideSwitchForbidden);
+        }
+
+        let cap_amount: u128 =
+            (m.min_to_open_usd as u128) * 1_000_000u128 * (m.dominance_cap_bps as u128) / 10_000u128;
+        let new_amt: u128 = (ctx.accounts.commitment.amount as u128) + (amount as u128);
+        require!(new_amt <= cap_amount, ErrorCode::DominanceCapExceeded);
+
+        let cpi_accounts = token::Transfer {
+            from: ctx.accounts.user_usdc_ata.to_account_info(),
+            to: ctx.accounts.commit_vault.to_account_info(),
+            authority: ctx.accounts.user.to_account_info(),
+        };
+        let cpi_ctx = CpiContext::new(ctx.accounts.token_program.to_account_info(), cpi_accounts);
+        token::transfer(cpi_ctx, amount)?;
+
+        ctx.accounts.commitment.market = m.key();
+        ctx.accounts.commitment.user = ctx.accounts.user.key();
+        ctx.accounts.commitment.side = side;
+        ctx.accounts.commitment.amount = new_amt as u64;
+        ctx.accounts.commitment.bump = ctx.bumps.commitment;
+
+        ctx.accounts.commit_pool.total_committed = ctx.accounts.commit_pool.total_committed.saturating_add(amount);
+        if side == 1 {
+            ctx.accounts.commit_pool.total_up = ctx.accounts.commit_pool.total_up.saturating_add(amount);
+        } else {
+            ctx.accounts.commit_pool.total_down = ctx.accounts.commit_pool.total_down.saturating_add(amount);
+        }
+
+        Ok(())
+    }
+
 /// Initialize or reset the market
     pub fn initialize_market(
         ctx: Context<InitializeMarket>,
@@ -564,4 +633,62 @@ pub mod btc_parimutuel {
 
         Ok(())
     }
+}
+
+// ============================================================================
+// A2: VFinal Commitment (Accounts)
+// ============================================================================
+
+#[derive(Accounts)]
+#[instruction(market_id: u64)]
+pub struct CommitVFinal<'info> {
+  #[account(mut)]
+  pub user: Signer<'info>,
+
+  #[account(
+    constraint = market.published @ ErrorCode::MarketNotPublished,
+    seeds = [b"market_v1".as_ref(), market_id.to_le_bytes().as_ref()],
+    bump = market.bump
+  )]
+  pub market: Account<'info, VFinalMarket>,
+
+  #[account(
+    init_if_needed,
+    payer = user,
+    space = 8 + std::mem::size_of::<VFinalCommitPool>(),
+    seeds = [b"commit_pool_v1".as_ref(), market.key().as_ref()],
+    bump
+  )]
+  pub commit_pool: Account<'info, VFinalCommitPool>,
+
+  #[account(
+    init_if_needed,
+    payer = user,
+    seeds = [b"commit_vault_v1".as_ref(), market.key().as_ref()],
+    bump,
+    token::mint = usdc_mint,
+    token::authority = commit_pool
+  )]
+  pub commit_vault: Account<'info, TokenAccount>,
+
+  #[account(
+    init_if_needed,
+    payer = user,
+    space = 8 + std::mem::size_of::<VFinalCommitment>(),
+    seeds = [b"commitment_v1".as_ref(), market.key().as_ref(), user.key().as_ref()],
+    bump
+  )]
+  pub commitment: Account<'info, VFinalCommitment>,
+
+  #[account(
+    mut,
+    constraint = user_usdc_ata.owner == user.key(),
+    constraint = user_usdc_ata.mint == usdc_mint.key()
+  )]
+  pub user_usdc_ata: Account<'info, TokenAccount>,
+
+  pub usdc_mint: Account<'info, Mint>,
+  pub system_program: Program<'info, System>,
+  pub token_program: Program<'info, Token>,
+  pub rent: Sysvar<'info, Rent>,
 }

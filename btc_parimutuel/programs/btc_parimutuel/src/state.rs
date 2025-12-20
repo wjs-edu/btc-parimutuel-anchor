@@ -20,3 +20,30 @@ pub struct VFinalMarket {
   pub bump: u8,
   pub _reserved: [u8; 32],
 }
+
+// ==========================
+// A2: Commitment Accounts
+// ==========================
+
+#[account]
+pub struct VFinalCommitPool {
+  pub market: Pubkey,          // VFinalMarket PDA
+  pub usdc_mint: Pubkey,       // mint committed into the vault
+  pub commit_vault: Pubkey,    // token account holding committed USDC
+  pub total_committed: u64,    // total committed (USDC smallest units)
+  pub total_up: u64,
+  pub total_down: u64,
+  pub bump: u8,
+  pub vault_bump: u8,
+  pub _reserved: [u8; 32],
+}
+
+#[account]
+pub struct VFinalCommitment {
+  pub market: Pubkey,          // VFinalMarket PDA
+  pub user: Pubkey,            // committer
+  pub side: u8,                // 1=UP,2=DOWN
+  pub amount: u64,             // total committed (USDC smallest units)
+  pub bump: u8,
+  pub _reserved: [u8; 32],
+}
