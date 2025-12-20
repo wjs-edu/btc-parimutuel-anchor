@@ -17,3 +17,5 @@ Allowed now:
 - A1: Market publish + parameter lock (see docs/phase-a/A1_market_publish.md)
 Rule:
 - Phase 0 green must remain green at all times.
+
+- A1 DONE: publish_market_vfinal merged; green => 3 passing (A1 + Phase0 smoke + fairness)

@@ -22,3 +22,7 @@ Identity: market_id, family/variant, admin, creator, usdc_mint, vaults
 Ladder params: min_to_open, dominance_cap_bps, commit_open_ts, commit_close_ts, bet_cutoff_ts, fee_bps, platform_fee_bps
 State: Draft -> CommitmentWindowOpen only; params immutable after publish
 Green: Phase 0 stays green (anchor test --skip-local-validator --provider.cluster devnet --skip-deploy)
+
+## Status
+- Implemented: publish_market_vfinal + immutable publish record (PDA seed market_v1)
+- Proof: devnet green command => 3 passing (A1 + smoke + fairness)
