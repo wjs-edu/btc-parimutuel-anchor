@@ -190,6 +190,11 @@ describe("btc_parimutuel devnet smoke", () => {
         .rpc({ commitment: "confirmed" })
     );
     console.log("claimPayout tx:", claimTx);
+    // A6 receipt PDA: ["receipt_v1", betPda]
+    const [receiptPda] = anchor.web3.PublicKey.findProgramAddressSync([Buffer.from("receipt_v1"), betPda.toBuffer()], program.programId);
+    const info = await provider.connection.getAccountInfo(receiptPda, "confirmed");
+    assert(info !== null, "expected receipt PDA account to exist after claim");
+
 
     const after = (await connection.getTokenAccountBalance(userAta.address)).value.amount;
     console.log("user ATA balance before/after:", before, after);
