@@ -64,3 +64,18 @@ impl VFinalMarket {
     self._reserved[8..16].copy_from_slice(&b);
   }
 }
+
+// ==========================
+// A5: Refund helpers
+// ==========================
+impl VFinalCommitment {
+  pub fn a5_is_refunded(&self) -> bool {
+    self._reserved[0] == 1
+  }
+
+  pub fn a5_mark_refunded(&mut self, refunded_at: i64) {
+    self._reserved[0] = 1;
+    let b = refunded_at.to_le_bytes();
+    self._reserved[8..16].copy_from_slice(&b);
+  }
+}
