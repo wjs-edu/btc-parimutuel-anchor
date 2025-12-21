@@ -111,26 +111,296 @@ describe.only("A5 cancel refund + recovery (vFinal)", () => {
     );
   });
 
-  it("A5.2 refund blocked when A4 outcome == OPEN", async () => {
-    assert.strictEqual(typeof (program as any).methods[refundMethodName], "function", "MISSING_REFUND_METHOD:refundCommitmentVfinal");
-    // TODO (after instruction exists): create OPEN market, settle A4->OPEN, then assert refund fails with "NotCanceled".
-    assert.ok(true);
-  });
+it("A5.2 refund blocked when A4 outcome == OPEN", async () => {
 
-  it("A5.3 refund succeeds once; second call cannot change balances (idempotent)", async () => {
-    assert.strictEqual(typeof (program as any).methods[refundMethodName], "function", "MISSING_REFUND_METHOD:refundCommitmentVfinal");
-    // TODO: after instruction exists:
-    // - make CANCEL market, commit, settle->CANCEL
-    // - refund once: user +amt, vault -amt
-    // - refund again: balances unchanged (no-op or AlreadyRefunded)
-    assert.ok(true);
-  });
+    const marketId = new anchor.BN(Date.now() % 1_000_000_000);
+    const marketIdLe = Buffer.alloc(8);
+    marketIdLe.writeBigUInt64LE(BigInt(marketId.toString()));
+    const [marketPda] = PublicKey.findProgramAddressSync([Buffer.from("market_v1"), marketIdLe], program.programId);
+    const [commitPoolPda] = PublicKey.findProgramAddressSync([Buffer.from("commit_pool_v1"), marketPda.toBuffer()], program.programId);
+    const [commitVaultPda] = PublicKey.findProgramAddressSync([Buffer.from("commit_vault_v1"), marketPda.toBuffer()], program.programId);
 
-  it("A5.4 order independence (A->B == B->A) + vault conservation", async () => {
-    assert.strictEqual(typeof (program as any).methods[refundMethodName], "function", "MISSING_REFUND_METHOD:refundCommitmentVfinal");
-    // TODO: after instruction exists:
-    // - 2 users commit in CANCEL market, settle->CANCEL
-    // - refund A then B vs B then A: same final balances + vault conservation
-    assert.ok(true);
-  });
+    const usdcMint = await createMint(connection, payer, admin, null, 6);
+    const now = Math.floor(Date.now() / 1000);
+    const commitClose = now + 120;
+
+    await rpcRetry(() =>
+      program.methods.publishMarketVfinal(marketId, {
+        variant: 0, creator: admin,
+        commitOpenTs: new anchor.BN(now - 2),
+        commitCloseTs: new anchor.BN(commitClose),
+        resolutionTs: new anchor.BN(commitClose + 60),
+        overrideMinToOpenUsd: new anchor.BN(20),
+        overrideBetCutoffTs: null,
+      }).accounts({ admin, market: marketPda, systemProgram: SystemProgram.programId })
+        .rpc({ commitment: "confirmed" })
+    );
+
+    const m = await program.account.vFinalMarket.fetch(marketPda);
+    const minToOpenUsd = BigInt(m.minToOpenUsd.toString());
+    const dominanceCapBps = BigInt(m.dominanceCapBps.toString());
+    const minToOpenUsdc = minToOpenUsd * 1_000_000n;
+    const capPerUser = (minToOpenUsdc * dominanceCapBps) / 10_000n;
+    const commitAmt = capPerUser - 1n;
+    const users: { pubkey: PublicKey; signer: Keypair | null }[] = [{ pubkey: admin, signer: null }];
+    while (BigInt(users.length) * commitAmt < minToOpenUsdc) {
+      const kp = Keypair.generate();
+      users.push({ pubkey: kp.publicKey, signer: kp });
+    }
+
+    for (let i = 1; i < users.length; i++) {
+      const kp = users[i].signer!;
+      const tx = new anchor.web3.Transaction().add(
+        SystemProgram.transfer({ fromPubkey: admin, toPubkey: kp.publicKey, lamports: Math.floor(0.05 * LAMPORTS_PER_SOL) })
+      );
+      await sendAndConfirmRetry(provider, tx, [], { commitment: "confirmed" });
+    }
+
+    const atas: Record<string, PublicKey> = {};
+    const mintPerUser = Number(commitAmt + 2_000_000n);
+    for (const u of users) {
+      const ata = await getOrCreateAssociatedTokenAccount(connection, payer, usdcMint, u.pubkey);
+      atas[u.pubkey.toBase58()] = ata.address;
+      await mintTo(connection, payer, usdcMint, ata.address, admin, mintPerUser);
+    }
+
+    for (const u of users) {
+      const [commitmentPda] = PublicKey.findProgramAddressSync(
+        [Buffer.from("commitment_v1"), marketPda.toBuffer(), u.pubkey.toBuffer()],
+        program.programId
+      );
+      await rpcRetry(() =>
+        program.methods.commitVfinal(marketId, 1, new anchor.BN(commitAmt.toString()))
+          .accounts({
+            user: u.pubkey, market: marketPda, commitPool: commitPoolPda, commitVault: commitVaultPda,
+            commitment: commitmentPda, userUsdcAta: atas[u.pubkey.toBase58()], usdcMint,
+            systemProgram: SystemProgram.programId, tokenProgram: TOKEN_PROGRAM_ID, rent: anchor.web3.SYSVAR_RENT_PUBKEY,
+          })
+          .signers(u.signer ? [u.signer] : [])
+          .rpc({ commitment: "confirmed" })
+      );
+    }
+
+    const slot = await connection.getSlot("confirmed");
+    const chainNow = (await connection.getBlockTime(slot)) ?? Math.floor(Date.now() / 1000);
+    const waitSec = Math.max(0, commitClose - chainNow + 2);
+    await new Promise((r) => setTimeout(r, waitSec * 1000));
+
+    await rpcRetry(() =>
+      (program as any).methods.settleCommitCloseVfinal(marketId)
+        .accounts({ market: marketPda, commitPool: commitPoolPda })
+        .rpc({ commitment: "confirmed" })
+    );
+
+
+    const [adminCommitmentPda] = PublicKey.findProgramAddressSync(
+      [Buffer.from("commitment_v1"), marketPda.toBuffer(), admin.toBuffer()],
+      program.programId
+    );
+    const adminAta = atas[admin.toBase58()];
+
+    await expectFailContains(
+      rpcRetry(() =>
+        (program as any).methods.refundCommitmentVfinal(marketId)
+          .accounts({
+            user: admin, market: marketPda, commitPool: commitPoolPda, commitVault: commitVaultPda,
+            commitment: adminCommitmentPda, userUsdcAta: adminAta, tokenProgram: TOKEN_PROGRAM_ID,
+          })
+          .rpc({ commitment: "confirmed" })
+      ),
+      "NotCanceled"
+    );
+});
+
+it("A5.3 refund succeeds once; second call cannot change balances (idempotent)", async () => {
+  const marketId = new anchor.BN((Date.now() + 2) % 1_000_000_000);
+  const { market: marketPda, commitPool: commitPoolPda, commitVault: commitVaultPda } =
+    findPdas(program.programId, marketId);
+
+  const usdcMint = await createMint(connection, payer, admin, null, 6);
+  const adminAta = await getOrCreateAssociatedTokenAccount(connection, payer, usdcMint, admin);
+  await mintTo(connection, payer, usdcMint, adminAta.address, admin, 5_000_000);
+
+  const now = Math.floor(Date.now() / 1000);
+  const commitClose = now + 20;
+
+  await rpcRetry(() =>
+    program.methods.publishMarketVfinal(marketId, {
+      variant: 0, creator: admin,
+      commitOpenTs: new anchor.BN(now - 2),
+      commitCloseTs: new anchor.BN(commitClose),
+      resolutionTs: new anchor.BN(commitClose + 60),
+      overrideMinToOpenUsd: new anchor.BN(20),
+      overrideBetCutoffTs: null,
+    }).accounts({ admin, market: marketPda, systemProgram: SystemProgram.programId })
+      .rpc({ commitment: "confirmed" })
+  );
+  const [commitmentPda] = PublicKey.findProgramAddressSync(
+    [Buffer.from("commitment_v1"), marketPda.toBuffer(), admin.toBuffer()],
+    program.programId
+  );
+
+  const amt = 1_000_000n;
+
+  await rpcRetry(() =>
+    program.methods.commitVfinal(marketId, 1, new anchor.BN(amt.toString()))
+      .accounts({
+        user: admin, market: marketPda, commitPool: commitPoolPda, commitVault: commitVaultPda,
+        commitment: commitmentPda, userUsdcAta: adminAta.address, usdcMint,
+        systemProgram: SystemProgram.programId, tokenProgram: TOKEN_PROGRAM_ID, rent: anchor.web3.SYSVAR_RENT_PUBKEY,
+      })
+      .rpc({ commitment: "confirmed" })
+  );
+
+  await waitUntilAfterTs(connection, commitClose, 2);
+
+  await rpcRetry(() =>
+    (program as any).methods.settleCommitCloseVfinal(marketId)
+      .accounts({ market: marketPda, commitPool: commitPoolPda })
+      .rpc({ commitment: "confirmed" })
+  );
+  const u0 = await tokenBal(connection, adminAta.address);
+  const v0 = await tokenBal(connection, commitVaultPda);
+
+  await rpcRetry(() =>
+    (program as any).methods.refundCommitmentVfinal(marketId)
+      .accounts({
+        user: admin, market: marketPda, commitPool: commitPoolPda, commitVault: commitVaultPda,
+        commitment: commitmentPda, userUsdcAta: adminAta.address, tokenProgram: TOKEN_PROGRAM_ID,
+      })
+      .rpc({ commitment: "confirmed" })
+  );
+
+  const u1 = await tokenBal(connection, adminAta.address);
+  const v1 = await tokenBal(connection, commitVaultPda);
+  assert(u1 - u0 === amt, "refund: user delta");
+  assert(v0 - v1 === amt, "refund: vault delta");
+  const u2b = await tokenBal(connection, adminAta.address);
+  const v2b = await tokenBal(connection, commitVaultPda);
+
+  try {
+    await rpcRetry(() =>
+      (program as any).methods.refundCommitmentVfinal(marketId)
+        .accounts({
+          user: admin, market: marketPda, commitPool: commitPoolPda, commitVault: commitVaultPda,
+          commitment: commitmentPda, userUsdcAta: adminAta.address, tokenProgram: TOKEN_PROGRAM_ID,
+        })
+        .rpc({ commitment: "confirmed" })
+    );
+  } catch {}
+
+  const u2 = await tokenBal(connection, adminAta.address);
+  const v2 = await tokenBal(connection, commitVaultPda);
+  assert(u2 === u2b, "second refund must not pay again");
+  assert(v2 === v2b, "second refund must not drain vault");
+});
+
+it("A5.4 order independence (A->B == B->A) + vault conservation", async () => {
+  async function run(order: "AB" | "BA") {
+    const marketId = new anchor.BN((Date.now() + Math.floor(Math.random() * 10_000)) % 1_000_000_000);
+    const { market: marketPda, commitPool: commitPoolPda, commitVault: commitVaultPda } =
+      findPdas(program.programId, marketId);
+
+    const usdcMint = await createMint(connection, payer, admin, null, 6);
+    const now = Math.floor(Date.now() / 1000);
+    const commitClose = now + 20;
+
+    await rpcRetry(() =>
+      program.methods.publishMarketVfinal(marketId, {
+        variant: 0, creator: admin,
+        commitOpenTs: new anchor.BN(now - 2),
+        commitCloseTs: new anchor.BN(commitClose),
+        resolutionTs: new anchor.BN(commitClose + 60),
+        overrideMinToOpenUsd: new anchor.BN(20),
+        overrideBetCutoffTs: null,
+      }).accounts({ admin, market: marketPda, systemProgram: SystemProgram.programId })
+        .rpc({ commitment: "confirmed" })
+    );
+    const kpB = Keypair.generate();
+    const tx = new anchor.web3.Transaction().add(
+      SystemProgram.transfer({
+        fromPubkey: admin,
+        toPubkey: kpB.publicKey,
+        lamports: Math.floor(0.05 * LAMPORTS_PER_SOL),
+      })
+    );
+    await sendAndConfirmRetry(provider, tx, [], { commitment: "confirmed" });
+
+    const ataA = await getOrCreateAssociatedTokenAccount(connection, payer, usdcMint, admin);
+    const ataB = await getOrCreateAssociatedTokenAccount(connection, payer, usdcMint, kpB.publicKey);
+    await mintTo(connection, payer, usdcMint, ataA.address, admin, 5_000_000);
+    await mintTo(connection, payer, usdcMint, ataB.address, admin, 5_000_000);
+
+    const [cA] = PublicKey.findProgramAddressSync(
+      [Buffer.from("commitment_v1"), marketPda.toBuffer(), admin.toBuffer()],
+      program.programId
+    );
+    const [cB] = PublicKey.findProgramAddressSync(
+      [Buffer.from("commitment_v1"), marketPda.toBuffer(), kpB.publicKey.toBuffer()],
+      program.programId
+    );
+
+    const aAmt = 1_000_000n;
+    const bAmt = 2_000_000n;
+    await rpcRetry(() =>
+      program.methods.commitVfinal(marketId, 1, new anchor.BN(aAmt.toString()))
+        .accounts({
+          user: admin, market: marketPda, commitPool: commitPoolPda, commitVault: commitVaultPda,
+          commitment: cA, userUsdcAta: ataA.address, usdcMint,
+          systemProgram: SystemProgram.programId, tokenProgram: TOKEN_PROGRAM_ID, rent: anchor.web3.SYSVAR_RENT_PUBKEY,
+        }).rpc({ commitment: "confirmed" })
+    );
+
+    await rpcRetry(() =>
+      program.methods.commitVfinal(marketId, 1, new anchor.BN(bAmt.toString()))
+        .accounts({
+          user: kpB.publicKey, market: marketPda, commitPool: commitPoolPda, commitVault: commitVaultPda,
+          commitment: cB, userUsdcAta: ataB.address, usdcMint,
+          systemProgram: SystemProgram.programId, tokenProgram: TOKEN_PROGRAM_ID, rent: anchor.web3.SYSVAR_RENT_PUBKEY,
+        }).signers([kpB]).rpc({ commitment: "confirmed" })
+    );
+
+    await waitUntilAfterTs(connection, commitClose, 2);
+
+    await rpcRetry(() =>
+      (program as any).methods.settleCommitCloseVfinal(marketId)
+        .accounts({ market: marketPda, commitPool: commitPoolPda })
+        .rpc({ commitment: "confirmed" })
+    );
+    const a0 = await tokenBal(connection, ataA.address);
+    const b0 = await tokenBal(connection, ataB.address);
+    const v0 = await tokenBal(connection, commitVaultPda);
+
+    const rA = () => rpcRetry(() =>
+      (program as any).methods.refundCommitmentVfinal(marketId)
+        .accounts({
+          user: admin, market: marketPda, commitPool: commitPoolPda, commitVault: commitVaultPda,
+          commitment: cA, userUsdcAta: ataA.address, tokenProgram: TOKEN_PROGRAM_ID,
+        }).rpc({ commitment: "confirmed" })
+    );
+    const rB = () => rpcRetry(() =>
+      (program as any).methods.refundCommitmentVfinal(marketId)
+        .accounts({
+          user: kpB.publicKey, market: marketPda, commitPool: commitPoolPda, commitVault: commitVaultPda,
+          commitment: cB, userUsdcAta: ataB.address, tokenProgram: TOKEN_PROGRAM_ID,
+        }).signers([kpB]).rpc({ commitment: "confirmed" })
+    );
+
+    if (order === "AB") { await rA(); await rB(); } else { await rB(); await rA(); }
+
+    const a1 = await tokenBal(connection, ataA.address);
+    const b1 = await tokenBal(connection, ataB.address);
+    const v1 = await tokenBal(connection, commitVaultPda);
+
+    assert(((a1 - a0) + (b1 - b0)) === (v0 - v1), "vault conservation violated");
+    return { a1, b1, v1 };
+  }
+
+  const ab = await run("AB");
+  const ba = await run("BA");
+
+  assert(ab.a1 === ba.a1, "order dependence A");
+  assert(ab.b1 === ba.b1, "order dependence B");
+  assert(ab.v1 === ba.v1, "order dependence vault");
+});
 });
