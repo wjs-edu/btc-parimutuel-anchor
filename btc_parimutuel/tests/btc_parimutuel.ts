@@ -109,7 +109,7 @@ describe.skip("btc_parimutuel devnet smoke", () => {
       SystemProgram.transfer({
         fromPubkey: admin,
         toPubkey: userKp.publicKey,
-        lamports: Math.floor(0.01 * LAMPORTS_PER_SOL),
+        lamports: Math.floor(0.005 * LAMPORTS_PER_SOL),
       })
     );
     const sig = await rpcRetry(() => provider.sendAndConfirm(tx, [], { commitment: "confirmed" }));

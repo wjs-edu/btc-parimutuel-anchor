@@ -51,7 +51,7 @@ describe("A4 settle at commit close (OPEN)", () => {
     for (let i = 1; i < users.length; i++) {
       const kp = users[i].signer!;
       const tx = new anchor.web3.Transaction().add(
-        SystemProgram.transfer({ fromPubkey: admin, toPubkey: kp.publicKey, lamports: Math.floor(0.01 * LAMPORTS_PER_SOL) })
+        SystemProgram.transfer({ fromPubkey: admin, toPubkey: kp.publicKey, lamports: Math.floor(0.005 * LAMPORTS_PER_SOL) })
       );
       await sendAndConfirmRetry(provider, tx, [], { commitment: "confirmed" });
     }

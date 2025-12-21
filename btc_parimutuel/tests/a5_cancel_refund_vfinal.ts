@@ -151,7 +151,7 @@ it("A5.2 refund blocked when A4 outcome == OPEN", async () => {
     for (let i = 1; i < users.length; i++) {
       const kp = users[i].signer!;
       const tx = new anchor.web3.Transaction().add(
-        SystemProgram.transfer({ fromPubkey: admin, toPubkey: kp.publicKey, lamports: Math.floor(0.01 * LAMPORTS_PER_SOL) })
+        SystemProgram.transfer({ fromPubkey: admin, toPubkey: kp.publicKey, lamports: Math.floor(0.005 * LAMPORTS_PER_SOL) })
       );
       await sendAndConfirmRetry(provider, tx, [], { commitment: "confirmed" });
     }
@@ -321,7 +321,7 @@ it("A5.4 order independence (A->B == B->A) + vault conservation", async () => {
       SystemProgram.transfer({
         fromPubkey: admin,
         toPubkey: kpB.publicKey,
-        lamports: Math.floor(0.01 * LAMPORTS_PER_SOL),
+        lamports: Math.floor(0.005 * LAMPORTS_PER_SOL),
       })
     );
     await sendAndConfirmRetry(provider, tx, [], { commitment: "confirmed" });
