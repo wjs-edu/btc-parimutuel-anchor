@@ -72,6 +72,17 @@ pub enum ErrorCode {
       TooEarlyToSettle,
       #[msg("Commit-close already settled.")]
       AlreadySettled,
+
+    // A5: cancel refund
+    #[msg("Too early to refund (commit window not closed).")]
+    TooEarly,
+    #[msg("Market is not canceled.")]
+    NotCanceled,
+    #[msg("No commitment to refund.")]
+    NoCommitment,
+    #[msg("Commitment already refunded.")]
+    AlreadyRefunded,
+
 }
 
 // ============================================================================
@@ -349,6 +360,61 @@ pub mod btc_parimutuel {
         m.a4_settle(outcome, clock.unix_timestamp);
         Ok(())
     }
+
+    pub fn refund_commitment_vfinal(
+        ctx: Context<RefundCommitmentVFinal>,
+        _market_id: u64,
+    ) -> Result<()> {
+        let clock = Clock::get()?;
+        let m = &ctx.accounts.market;
+
+        require!(clock.unix_timestamp >= m.commit_close_ts, ErrorCode::TooEarly);
+        require!(m.a4_is_settled(), ErrorCode::TooEarly);
+        require!(m.a4_outcome() == 2, ErrorCode::NotCanceled);
+
+        require!(ctx.accounts.commit_pool.market == m.key(), ErrorCode::MarketNotPublished);
+
+        let c = &mut ctx.accounts.commitment;
+        require!(c.amount > 0, ErrorCode::NoCommitment);
+        require!(!c.a5_is_refunded(), ErrorCode::AlreadyRefunded);
+
+        let amount = c.amount;
+        c.amount = 0;
+        c.a5_mark_refunded(clock.unix_timestamp);
+
+        let market_key = m.key();
+        let seeds: &[&[u8]] = &[
+            b"commit_pool_v1",
+            market_key.as_ref(),
+            &[ctx.accounts.commit_pool.bump],
+        ];
+        let signer_seeds = &[seeds];
+
+        let cpi_accounts = token::Transfer {
+            from: ctx.accounts.commit_vault.to_account_info(),
+            to: ctx.accounts.user_usdc_ata.to_account_info(),
+            authority: ctx.accounts.commit_pool.to_account_info(),
+        };
+        let cpi_ctx = CpiContext::new_with_signer(
+            ctx.accounts.token_program.to_account_info(),
+            cpi_accounts,
+            signer_seeds,
+        );
+        token::transfer(cpi_ctx, amount)?;
+
+        ctx.accounts.commit_pool.total_committed =
+            ctx.accounts.commit_pool.total_committed.saturating_sub(amount);
+        if c.side == 1 {
+            ctx.accounts.commit_pool.total_up =
+                ctx.accounts.commit_pool.total_up.saturating_sub(amount);
+        } else if c.side == 2 {
+            ctx.accounts.commit_pool.total_down =
+                ctx.accounts.commit_pool.total_down.saturating_sub(amount);
+        }
+
+        Ok(())
+    }
+
 
 pub fn commit_vfinal(ctx: Context<CommitVFinal>, market_id: u64, side: u8, amount: u64) -> Result<()> {
         let clock = Clock::get()?;
@@ -727,4 +793,53 @@ pub struct CommitVFinal<'info> {
   pub system_program: Program<'info, System>,
   pub token_program: Program<'info, Token>,
   pub rent: Sysvar<'info, Rent>,
+}
+
+// ============================================================================
+// A5: VFinal Cancel Refund (Accounts)
+// ============================================================================
+#[derive(Accounts)]
+#[instruction(market_id: u64)]
+pub struct RefundCommitmentVFinal<'info> {
+  #[account(mut)]
+  pub user: Signer<'info>,
+
+  #[account(
+    constraint = market.published @ ErrorCode::MarketNotPublished,
+    seeds = [b"market_v1".as_ref(), market_id.to_le_bytes().as_ref()],
+    bump = market.bump
+  )]
+  pub market: Account<'info, VFinalMarket>,
+
+  #[account(
+    mut,
+    seeds = [b"commit_pool_v1".as_ref(), market.key().as_ref()],
+    bump = commit_pool.bump
+  )]
+  pub commit_pool: Account<'info, VFinalCommitPool>,
+
+  #[account(
+    mut,
+    seeds = [b"commit_vault_v1".as_ref(), market.key().as_ref()],
+    bump = commit_pool.vault_bump,
+    constraint = commit_vault.key() == commit_pool.commit_vault,
+    constraint = commit_vault.mint == commit_pool.usdc_mint
+  )]
+  pub commit_vault: Account<'info, TokenAccount>,
+
+  #[account(
+    mut,
+    seeds = [b"commitment_v1".as_ref(), market.key().as_ref(), user.key().as_ref()],
+    bump = commitment.bump
+  )]
+  pub commitment: Account<'info, VFinalCommitment>,
+
+  #[account(
+    mut,
+    constraint = user_usdc_ata.owner == user.key(),
+    constraint = user_usdc_ata.mint == commit_pool.usdc_mint
+  )]
+  pub user_usdc_ata: Account<'info, TokenAccount>,
+
+  pub token_program: Program<'info, Token>,
 }
