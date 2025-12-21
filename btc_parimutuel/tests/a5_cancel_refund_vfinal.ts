@@ -48,7 +48,7 @@ async function expectFailContains(p: Promise<any>, needle: string) {
   assert(threw, `expected throw containing "${needle}"`);
 }
 
-describe.only("A5 cancel refund + recovery (vFinal)", () => {
+describe("A5 cancel refund + recovery (vFinal)", () => {
   const provider = anchor.AnchorProvider.env();
   anchor.setProvider(provider);
   const program = anchor.workspace.BtcParimutuel as anchor.Program<any>;
