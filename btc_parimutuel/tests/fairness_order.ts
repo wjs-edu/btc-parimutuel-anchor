@@ -94,6 +94,7 @@ describe("fairness (devnet)", () => {
       await new Promise(r => setTimeout(r, waitSec * 1000));
 
       const m2 = await (program as any).account.market.fetch(marketPda);
+      await getAccount(connection, usdcVaultAta.address);
       await rpcRetry(() => (program as any).methods
         .resolveMarket(marketId, 1)
         .accounts({ admin, market: marketPda, usdcVault: usdcVaultAta.address, feeVault: feeVaultAta.address, creatorFeeVault: creatorFeeVaultAta.address, tokenProgram: TOKEN_PROGRAM_ID })
@@ -106,6 +107,7 @@ describe("fairness (devnet)", () => {
         const u = who === "A" ? userA : userB;
         const b = who === "A" ? betA : betB;
         const a = who === "A" ? ataA : ataB;
+        await getAccount(connection, usdcVaultAta.address);
         await rpcRetry(() => (program as any).methods
           .claimPayout(marketId)
           .accounts({ user: u.publicKey, market: marketPda, bet: b, receipt: (who === "A" ? receiptA : receiptB), usdcVault: usdcVaultAta.address, userUsdcAta: a.address, systemProgram: SystemProgram.programId, tokenProgram: TOKEN_PROGRAM_ID })

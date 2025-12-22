@@ -168,6 +168,7 @@ describe("btc_parimutuel devnet smoke", () => {
     const before = (await connection.getTokenAccountBalance(userAta.address)).value.amount;
 
     const resolveTx = await rpcRetry(() =>
+    await getAccount(connection, usdcVaultAta.address);
       (program as any).methods
         .resolveMarket(marketId, 1) // outcome=1 (UP)
         .accounts({
@@ -183,6 +184,7 @@ describe("btc_parimutuel devnet smoke", () => {
     console.log("resolveMarket tx:", resolveTx);
 
     const claimTx = await rpcRetry(() =>
+    await getAccount(connection, usdcVaultAta.address);
       (program as any).methods
         .claimPayout(marketId)
       .accounts({ user: userKp.publicKey, market: marketPda, bet: betPda, receipt: receiptPda, usdcVault: usdcVaultAta.address, userUsdcAta: userAta.address, systemProgram: SystemProgram.programId, tokenProgram: TOKEN_PROGRAM_ID })
