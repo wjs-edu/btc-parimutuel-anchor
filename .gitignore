@@ -1,0 +1,4 @@
+
+# never commit CI devnet keypair
+btc_parimutuel/.ci-devnet-keypair.json
+ci-devnet-keypair.json
