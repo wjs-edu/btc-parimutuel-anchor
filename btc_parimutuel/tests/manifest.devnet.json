@@ -4,5 +4,6 @@
   "tests/a3_threshold_reached_info.ts",
   "tests/a4_settle_cancel_at_close.ts",
   "tests/a4_settle_open_at_close.ts",
-  "tests/a5_cancel_refund_vfinal.ts"
+  "tests/a5_cancel_refund_vfinal.ts",
+  "tests/a6_claim_receipt_vfinal.ts"
 ]
