@@ -34,9 +34,12 @@ async function waitUntilAfterTs(connection: anchor.web3.Connection, targetTs: nu
 }
 
 async function tokenBal(connection: anchor.web3.Connection, ata: PublicKey): Promise<bigint> {
+  const info = await connection.getAccountInfo(ata, "confirmed");
+  if (info === null) return 0n; // treat missing ATA as zero balance (devnet-safe)
   const acct = await getAccount(connection, ata, "confirmed");
   return acct.amount;
 }
+
 
 
 async function expectFailContains(p: Promise<any>, needle: string) {
