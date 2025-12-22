@@ -33,8 +33,7 @@ jobs:
       - name: Install Yarn deps
         run: yarn install --frozen-lockfile
 
-      - name: Install Rust
-          run: |
+      - name: Install Rust          run: |
             rustup toolchain install 1.83.0
             rustup default 1.83.0
             rustc --version
