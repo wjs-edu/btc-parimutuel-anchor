@@ -40,6 +40,16 @@ async function tokenBal(connection: anchor.web3.Connection, ata: PublicKey): Pro
   return acct.amount;
 }
 
+async function vaultBal(connection: anchor.web3.Connection, vaultPda: PublicKey, vaultAta: PublicKey): Promise<bigint> {
+  const pdaInfo = await connection.getAccountInfo(vaultPda, "confirmed");
+  const ataInfo = await connection.getAccountInfo(vaultAta, "confirmed");
+
+  // Prefer the one that exists; if both exist, prefer PDA (explicit account passed to ix).
+  if (pdaInfo !== null) return tokenBal(connection, vaultPda);
+  if (ataInfo !== null) return tokenBal(connection, vaultAta);
+  return 0n;
+}
+
 
 
 async function expectFailContains(p: Promise<any>, needle: string) {
@@ -268,7 +278,7 @@ it("A5.3 refund succeeds once; second call cannot change balances (idempotent)",
       .rpc({ commitment: "confirmed" })
   );
   const u0 = await tokenBal(connection, adminAta.address);
-  const v0 = await tokenBal(connection, commitVaultAta);
+  const v0 = await vaultBal(connection, commitVaultPda, commitVaultAta);
 
   await rpcRetry(() =>
     (program as any).methods.refundCommitmentVfinal(marketId)
@@ -280,11 +290,11 @@ it("A5.3 refund succeeds once; second call cannot change balances (idempotent)",
   );
 
   const u1 = await tokenBal(connection, adminAta.address);
-  const v1 = await tokenBal(connection, commitVaultAta);
+  const v1 = await vaultBal(connection, commitVaultPda, commitVaultAta);
   assert(u1 - u0 === amt, "refund: user delta");
   assert(v0 - v1 === amt, "refund: vault delta");
   const u2b = await tokenBal(connection, adminAta.address);
-  const v2b = await tokenBal(connection, commitVaultAta);
+  const v2b = await vaultBal(connection, commitVaultPda, commitVaultAta);
 
   try {
     await rpcRetry(() =>
@@ -298,7 +308,7 @@ it("A5.3 refund succeeds once; second call cannot change balances (idempotent)",
   } catch {}
 
   const u2 = await tokenBal(connection, adminAta.address);
-  const v2 = await tokenBal(connection, commitVaultAta);
+  const v2 = await vaultBal(connection, commitVaultPda, commitVaultAta);
   assert(u2 === u2b, "second refund must not pay again");
   assert(v2 === v2b, "second refund must not drain vault");
 });
@@ -378,7 +388,7 @@ it("A5.4 order independence (A->B == B->A) + vault conservation", async () => {
     );
     const a0 = await tokenBal(connection, ataA.address);
     const b0 = await tokenBal(connection, ataB.address);
-    const v0 = await tokenBal(connection, commitVaultAta);
+    const v0 = await vaultBal(connection, commitVaultPda, commitVaultAta);
 
     const rA = () => rpcRetry(() =>
       (program as any).methods.refundCommitmentVfinal(marketId)
@@ -398,7 +408,7 @@ it("A5.4 order independence (A->B == B->A) + vault conservation", async () => {
     if (order === "AB") { await rA(); await rB(); } else { await rB(); await rA(); }
       const a1 = await tokenBal(connection, ataA.address);
     const b1 = await tokenBal(connection, ataB.address);
-    const v1 = await tokenBal(connection, commitVaultAta);
+    const v1 = await vaultBal(connection, commitVaultPda, commitVaultAta);
 
     assert(((a1 - a0) + (b1 - b0)) === (v0 - v1), "vault conservation violated");
     return { a1, b1, v1 };
