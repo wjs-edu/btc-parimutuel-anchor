@@ -7,6 +7,7 @@ import {
   TOKEN_PROGRAM_ID,
   getAccount,
 } from "@solana/spl-token";
+import { getAssociatedTokenAddressSync } from "@solana/spl-token";
 import { marketIdFromLabel } from "./utils/runSalt";
 import assert from "assert";
 import { rpcRetry, sendAndConfirmRetry } from "./utils/rpc";
@@ -37,6 +38,11 @@ async function tokenBal(connection: anchor.web3.Connection, ata: PublicKey): Pro
   return acct.amount;
 }
 
+
+async function awaitBarrier(connection: anchor.web3.Connection) {
+  const slot = await connection.getSlot("confirmed");
+  await connection.getBlockTime(slot);
+}
 async function expectFailContains(p: Promise<any>, needle: string) {
   let threw = false;
   try {
@@ -68,6 +74,7 @@ describe("A5 cancel refund + recovery (vFinal)", () => {
     const { market: marketPda, commitPool: commitPoolPda, commitVault: commitVaultPda } =
       findPdas(program.programId, marketId);
     const usdcMint = await createMint(connection, payer, admin, null, 6);
+      const commitVaultAta = getAssociatedTokenAddressSync(usdcMint, marketPda, true);
     const adminAta = await getOrCreateAssociatedTokenAccount(connection, payer, usdcMint, admin);
     await mintTo(connection, payer, usdcMint, adminAta.address, admin, 2_000_000);
     const now = Math.floor(Date.now() / 1000);
@@ -121,6 +128,7 @@ it("A5.2 refund blocked when A4 outcome == OPEN", async () => {
     const [commitVaultPda] = PublicKey.findProgramAddressSync([Buffer.from("commit_vault_v1"), marketPda.toBuffer()], program.programId);
 
     const usdcMint = await createMint(connection, payer, admin, null, 6);
+      const commitVaultAta = getAssociatedTokenAddressSync(usdcMint, marketPda, true);
     const now = Math.floor(Date.now() / 1000);
     const commitClose = now + 120;
 
@@ -218,6 +226,7 @@ it("A5.3 refund succeeds once; second call cannot change balances (idempotent)",
     findPdas(program.programId, marketId);
 
   const usdcMint = await createMint(connection, payer, admin, null, 6);
+      const commitVaultAta = getAssociatedTokenAddressSync(usdcMint, marketPda, true);
   const adminAta = await getOrCreateAssociatedTokenAccount(connection, payer, usdcMint, admin);
   await mintTo(connection, payer, usdcMint, adminAta.address, admin, 5_000_000);
 
@@ -260,7 +269,7 @@ it("A5.3 refund succeeds once; second call cannot change balances (idempotent)",
       .rpc({ commitment: "confirmed" })
   );
   const u0 = await tokenBal(connection, adminAta.address);
-  const v0 = await tokenBal(connection, commitVaultPda);
+  const v0 = await tokenBal(connection, commitVaultAta);
 
   await rpcRetry(() =>
     (program as any).methods.refundCommitmentVfinal(marketId)
@@ -272,11 +281,11 @@ it("A5.3 refund succeeds once; second call cannot change balances (idempotent)",
   );
 
   const u1 = await tokenBal(connection, adminAta.address);
-  const v1 = await tokenBal(connection, commitVaultPda);
+  const v1 = await tokenBal(connection, commitVaultAta);
   assert(u1 - u0 === amt, "refund: user delta");
   assert(v0 - v1 === amt, "refund: vault delta");
   const u2b = await tokenBal(connection, adminAta.address);
-  const v2b = await tokenBal(connection, commitVaultPda);
+  const v2b = await tokenBal(connection, commitVaultAta);
 
   try {
     await rpcRetry(() =>
@@ -290,10 +299,12 @@ it("A5.3 refund succeeds once; second call cannot change balances (idempotent)",
   } catch {}
 
   const u2 = await tokenBal(connection, adminAta.address);
-  const v2 = await tokenBal(connection, commitVaultPda);
+  const v2 = await tokenBal(connection, commitVaultAta);
   assert(u2 === u2b, "second refund must not pay again");
   assert(v2 === v2b, "second refund must not drain vault");
 });
+
+    await awaitBarrier(connection);
 
 it("A5.4 order independence (A->B == B->A) + vault conservation", async () => {
     const marketId = marketIdFromLabel("tests/a5_cancel_refund_vfinal.ts#A5.4");
@@ -303,6 +314,7 @@ it("A5.4 order independence (A->B == B->A) + vault conservation", async () => {
       findPdas(program.programId, marketId);
 
     const usdcMint = await createMint(connection, payer, admin, null, 6);
+      const commitVaultAta = getAssociatedTokenAddressSync(usdcMint, marketPda, true);
     const now = Math.floor(Date.now() / 1000);
     const commitClose = now + 20;
 
@@ -370,7 +382,7 @@ it("A5.4 order independence (A->B == B->A) + vault conservation", async () => {
     );
     const a0 = await tokenBal(connection, ataA.address);
     const b0 = await tokenBal(connection, ataB.address);
-    const v0 = await tokenBal(connection, commitVaultPda);
+    const v0 = await tokenBal(connection, commitVaultAta);
 
     const rA = () => rpcRetry(() =>
       (program as any).methods.refundCommitmentVfinal(marketId)
@@ -388,10 +400,11 @@ it("A5.4 order independence (A->B == B->A) + vault conservation", async () => {
     );
 
     if (order === "AB") { await rA(); await rB(); } else { await rB(); await rA(); }
+      await awaitBarrier(connection);
 
-    const a1 = await tokenBal(connection, ataA.address);
+      const a1 = await tokenBal(connection, ataA.address);
     const b1 = await tokenBal(connection, ataB.address);
-    const v1 = await tokenBal(connection, commitVaultPda);
+    const v1 = await tokenBal(connection, commitVaultAta);
 
     assert(((a1 - a0) + (b1 - b0)) === (v0 - v1), "vault conservation violated");
     return { a1, b1, v1 };
