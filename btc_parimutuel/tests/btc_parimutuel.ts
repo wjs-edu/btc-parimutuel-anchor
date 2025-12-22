@@ -1,3 +1,4 @@
+import { strict as assert } from "assert";
 import * as anchor from "@coral-xyz/anchor";
 import { Program } from "@coral-xyz/anchor";
 import { PublicKey, SystemProgram, SYSVAR_RENT_PUBKEY, Keypair, LAMPORTS_PER_SOL } from "@solana/web3.js";
@@ -129,6 +130,10 @@ describe("btc_parimutuel devnet smoke", () => {
       [Buffer.from("bet"), marketPda.toBuffer(), userKp.publicKey.toBuffer()],
       program.programId
     );
+    const [receiptPda] = anchor.web3.PublicKey.findProgramAddressSync(
+      [Buffer.from("receipt_v1"), betPda.toBuffer()],
+      program.programId
+    );
 
     const betTx = await rpcRetry(() =>
       (program as any).methods
@@ -178,18 +183,13 @@ describe("btc_parimutuel devnet smoke", () => {
     const claimTx = await rpcRetry(() =>
       (program as any).methods
         .claimPayout(marketId)
-        .accounts({
-          user: userKp.publicKey,
-          market: marketPda,
-          bet: betPda,
-          usdcVault: m2.usdcVault,
-          userUsdcAta: userAta.address,
-          tokenProgram: TOKEN_PROGRAM_ID,
-        })
+      .accounts({ user: userKp.publicKey, market: marketPda, bet: betPda, receipt: receiptPda, usdcVault: usdcVaultAta.address, userUsdcAta: userAta.address, systemProgram: SystemProgram.programId, tokenProgram: TOKEN_PROGRAM_ID })
         .signers([userKp])
         .rpc({ commitment: "confirmed" })
     );
     console.log("claimPayout tx:", claimTx);
+    const info = await provider.connection.getAccountInfo(receiptPda, "confirmed");
+    assert(info !== null, "expected receipt PDA account to exist after claim");
 
     const after = (await connection.getTokenAccountBalance(userAta.address)).value.amount;
     console.log("user ATA balance before/after:", before, after);
