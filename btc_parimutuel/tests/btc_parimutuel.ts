@@ -143,7 +143,7 @@ describe("btc_parimutuel devnet smoke", () => {
           userUsdcAta: userAta.address,
           market: marketPda,
           bet: betPda,
-          usdcVault: marketVault,
+          usdcVault: usdcVaultAta.address,
           tokenProgram: TOKEN_PROGRAM_ID,
           systemProgram: SystemProgram.programId,
           rent: SYSVAR_RENT_PUBKEY,
@@ -171,9 +171,9 @@ describe("btc_parimutuel devnet smoke", () => {
         .accounts({
           admin: admin,
           market: marketPda,
-          usdcVault: m2.usdcVault,
-          feeVault: m2.feeVault,
-          creatorFeeVault: m2.creatorFeeVault,
+          usdcVault: usdcVaultAta.address,
+          feeVault: feeVaultAta.address,
+          creatorFeeVault: creatorFeeVaultAta.address,
           tokenProgram: TOKEN_PROGRAM_ID,
         })
         .rpc({ commitment: "confirmed" })
