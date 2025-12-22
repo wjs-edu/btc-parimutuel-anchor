@@ -94,7 +94,7 @@ describe("fairness (devnet)", () => {
       const m2 = await (program as any).account.market.fetch(marketPda);
       await rpcRetry(() => (program as any).methods
         .resolveMarket(marketId, 1)
-        .accounts({ admin, market: marketPda, usdcVault: m2.usdcVault, feeVault: m2.feeVault, creatorFeeVault: m2.creatorFeeVault, tokenProgram: TOKEN_PROGRAM_ID })
+        .accounts({ admin, market: marketPda, usdcVault: usdcVaultAta.address, feeVault: feeVaultAta.address, creatorFeeVault: creatorFeeVaultAta.address, tokenProgram: TOKEN_PROGRAM_ID })
         .rpc({ commitment: "confirmed" })
       );
       const bA0 = BigInt((await connection.getTokenAccountBalance(ataA.address)).value.amount);
