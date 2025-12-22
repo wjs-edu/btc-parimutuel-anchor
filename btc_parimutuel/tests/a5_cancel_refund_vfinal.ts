@@ -215,6 +215,7 @@ it("A5.2 refund blocked when A4 outcome == OPEN", async () => {
 });
 
 it("A5.3 refund succeeds once; second call cannot change balances (idempotent)", async () => {
+    const marketId = marketIdFromLabel("tests/a5_cancel_refund_vfinal.ts#A5.3");
   const marketId = new anchor.BN((Date.now() + 2) % 1_000_000_000);
   const { market: marketPda, commitPool: commitPoolPda, commitVault: commitVaultPda } =
     findPdas(program.programId, marketId);
