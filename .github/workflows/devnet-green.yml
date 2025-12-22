@@ -35,8 +35,8 @@ jobs:
 
       - name: Install Rust (pinned 1.83.0)
         run: |
-          rustup toolchain install 1.83.0
-          rustup default 1.83.0
+          rustup toolchain install 1.77.2
+          rustup default 1.77.2
           rustc --version
           cargo --version
           head -n 8 Cargo.lock || true
