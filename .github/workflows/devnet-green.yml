@@ -67,7 +67,7 @@ jobs:
         run: |
           set -euo pipefail
           cargo --version
-          cargo install --locked anchor-cli --version 0.32.1
+          cargo install --locked --git https://github.com/coral-xyz/anchor --tag v0.32.1 anchor-cli
           anchor --version
 
       - name: Write devnet keypair
