@@ -74,7 +74,7 @@ describe("A2 commit_vfinal", () => {
       overrideBetCutoffTs: null,
     };
 
-    await withBlockhashRetry("A2 publish/commit", () => await rpcRetry(() =>
+    await withBlockhashRetry("A2 publish/commit", async () => rpcRetry(() =>
       program.methods.publishMarketVfinal(marketId, args)
         .accounts({ admin, market: marketPda, systemProgram: SystemProgram.programId })
         .rpc({ commitment: "confirmed" })
