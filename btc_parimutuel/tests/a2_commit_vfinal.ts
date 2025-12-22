@@ -21,6 +21,8 @@ describe("A2 commit_vfinal", () => {
   const connection = provider.connection;
   const payer = (provider.wallet as any).payer;
 
+  const marketId = marketIdFromLabel("tests/a2_commit_vfinal.ts");
+
   const marketIdLe = Buffer.alloc(8);
   marketIdLe.writeBigUInt64LE(BigInt(marketId.toString()));
   const [marketPda] = PublicKey.findProgramAddressSync([Buffer.from("market_v1"), marketIdLe], program.programId);
