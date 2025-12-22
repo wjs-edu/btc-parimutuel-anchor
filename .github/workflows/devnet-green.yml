@@ -61,7 +61,7 @@ jobs:
           tar -xjf "${TARBALL}"
           export PATH="${PWD}/solana-release/bin:${PATH}"
           echo "${PWD}/solana-release/bin" >> $GITHUB_PATH
-          solana --version
+          ./solana-release/bin/solana --version
 
       - name: Install Anchor CLI 0.32.1 (cargo)
         run: |
