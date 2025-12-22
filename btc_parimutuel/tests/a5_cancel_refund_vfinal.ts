@@ -50,8 +50,6 @@ async function expectFailContains(p: Promise<any>, needle: string) {
 }
 
 describe("A5 cancel refund + recovery (vFinal)", () => {
-  const marketId = marketIdFromLabel("tests/a5_cancel_refund_vfinal.ts");
-
   const provider = anchor.AnchorProvider.env();
   anchor.setProvider(provider);
   const program = anchor.workspace.BtcParimutuel as anchor.Program<any>;
@@ -64,6 +62,7 @@ describe("A5 cancel refund + recovery (vFinal)", () => {
   const refundMethodName = "refundCommitmentVfinal";
 
   it("A5.1 refund blocked before commit_close_ts", async () => {
+    const marketId = marketIdFromLabel("tests/a5_cancel_refund_vfinal.ts#A5.1");
     assert.strictEqual(typeof (program as any).methods[refundMethodName], "function", "MISSING_REFUND_METHOD:refundCommitmentVfinal");
 
     const { market: marketPda, commitPool: commitPoolPda, commitVault: commitVaultPda } =
@@ -114,8 +113,7 @@ describe("A5 cancel refund + recovery (vFinal)", () => {
   });
 
 it("A5.2 refund blocked when A4 outcome == OPEN", async () => {
-
-    const marketId = new anchor.BN(Date.now() % 1_000_000_000);
+    const marketId = marketIdFromLabel("tests/a5_cancel_refund_vfinal.ts#A5.2");
     const marketIdLe = Buffer.alloc(8);
     marketIdLe.writeBigUInt64LE(BigInt(marketId.toString()));
     const [marketPda] = PublicKey.findProgramAddressSync([Buffer.from("market_v1"), marketIdLe], program.programId);
@@ -216,7 +214,6 @@ it("A5.2 refund blocked when A4 outcome == OPEN", async () => {
 
 it("A5.3 refund succeeds once; second call cannot change balances (idempotent)", async () => {
     const marketId = marketIdFromLabel("tests/a5_cancel_refund_vfinal.ts#A5.3");
-  const marketId = new anchor.BN((Date.now() + 2) % 1_000_000_000);
   const { market: marketPda, commitPool: commitPoolPda, commitVault: commitVaultPda } =
     findPdas(program.programId, marketId);
 
@@ -299,9 +296,10 @@ it("A5.3 refund succeeds once; second call cannot change balances (idempotent)",
 });
 
 it("A5.4 order independence (A->B == B->A) + vault conservation", async () => {
+    const marketId = marketIdFromLabel("tests/a5_cancel_refund_vfinal.ts#A5.4");
   async function run(order: "AB" | "BA") {
-    const marketId = new anchor.BN((Date.now() + Math.floor(Math.random() * 10_000)) % 1_000_000_000);
-    const { market: marketPda, commitPool: commitPoolPda, commitVault: commitVaultPda } =
+    const marketId = marketIdFromLabel("tests/a5_cancel_refund_vfinal.ts#A5.4-" + order);
+      const { market: marketPda, commitPool: commitPoolPda, commitVault: commitVaultPda } =
       findPdas(program.programId, marketId);
 
     const usdcMint = await createMint(connection, payer, admin, null, 6);
