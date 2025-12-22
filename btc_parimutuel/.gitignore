@@ -17,3 +17,7 @@ Cargo.lock
 
 # local backups (never commit)
 programs/btc_parimutuel/src/*.bak_*
+
+# allow repo scripts (needed for CI test manifest + audit)
+!scripts/
+!scripts/**
