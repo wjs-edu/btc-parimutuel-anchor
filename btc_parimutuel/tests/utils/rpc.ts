@@ -33,3 +33,12 @@ export async function sendAndConfirmRetry(
 ) {
   return rpcRetry(() => provider.sendAndConfirm(tx, signers, opts), retries);
 }
+
+export async function waitForAccount(connection: any, pubkey: any, tries = 20, delayMs = 500) {
+  for (let i = 0; i < tries; i++) {
+    const info = await connection.getAccountInfo(pubkey, "confirmed");
+    if (info && info.data && info.data.length > 0) return;
+    await new Promise((r) => setTimeout(r, delayMs));
+  }
+  throw new Error(`waitForAccount: ${pubkey.toBase58?.() ?? String(pubkey)} not initialized after ${tries} tries`);
+}
