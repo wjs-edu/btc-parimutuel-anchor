@@ -21,3 +21,8 @@ programs/btc_parimutuel/src/*.bak_*
 # allow repo scripts (needed for CI test manifest + audit)
 !scripts/
 !scripts/**
+
+# local-only scripts artifacts
+scripts/__pycache__/
+scripts/gen_test_min.py
+scripts/green-devnet.sh
