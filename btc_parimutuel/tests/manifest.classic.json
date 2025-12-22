@@ -1,0 +1,4 @@
+[
+  "tests/btc_parimutuel.ts",
+  "tests/fairness_order.ts"
+]

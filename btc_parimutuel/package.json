@@ -2,7 +2,9 @@
   "license": "ISC",
   "scripts": {
     "lint:fix": "prettier */*.js \"*/**/*{.js,.ts}\" -w",
-    "lint": "prettier */*.js \"*/**/*{.js,.ts}\" --check"
+    "lint": "prettier */*.js \"*/**/*{.js,.ts}\" --check",
+    "test:devnet": "ANCHOR_PROVIDER_URL=https://api.devnet.solana.com anchor test --skip-local-validator --provider.cluster devnet --skip-deploy $(node scripts/print-manifest.js tests/manifest.devnet.json)",
+    "test:classic:devnet": "RUN_CLASSIC_DEVNET=1 ANCHOR_PROVIDER_URL=https://api.devnet.solana.com anchor test --skip-local-validator --provider.cluster devnet --skip-deploy $(node scripts/print-manifest.js tests/manifest.devnet.json) $(node scripts/print-manifest.js tests/manifest.classic.json)"
   },
   "dependencies": {
     "@coral-xyz/anchor": "^0.32.1"

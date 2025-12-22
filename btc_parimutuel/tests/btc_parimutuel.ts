@@ -1,3 +1,4 @@
+import { isDevnet } from "./_clusterGate";
 import * as anchor from "@coral-xyz/anchor";
 import { Program } from "@coral-xyz/anchor";
 import { PublicKey, SystemProgram, SYSVAR_RENT_PUBKEY, Keypair, LAMPORTS_PER_SOL } from "@solana/web3.js";
@@ -22,6 +23,10 @@ async function rpcRetry<T>(fn: () => Promise<T>, tries = 6) {
 }
 
 describe("btc_parimutuel devnet smoke", () => {
+  before(function () {
+    if (isDevnet() && process.env.RUN_CLASSIC_DEVNET !== "1") this.skip();
+  });
+
   const provider = anchor.AnchorProvider.env();
   anchor.setProvider(provider);
   const program = anchor.workspace.BtcParimutuel as Program;
