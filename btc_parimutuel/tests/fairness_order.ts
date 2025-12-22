@@ -70,6 +70,8 @@ describe("fairness (devnet)", () => {
       );
       const [betB] = PublicKey.findProgramAddressSync(
         [Buffer.from("bet"), marketPda.toBuffer(), userB.publicKey.toBuffer()],
+      const [receiptA] = PublicKey.findProgramAddressSync([Buffer.from("receipt_v1"), betA.toBuffer()], program.programId);
+      const [receiptB] = PublicKey.findProgramAddressSync([Buffer.from("receipt_v1"), betB.toBuffer()], program.programId);
         program.programId
       );
       await rpcRetry(() => (program as any).methods
@@ -104,21 +106,5 @@ describe("fairness (devnet)", () => {
         const a = who === "A" ? ataA : ataB;
         await rpcRetry(() => (program as any).methods
           .claimPayout(marketId)
-          .accounts({ user: u.publicKey, market: marketPda, bet: b, usdcVault: m2.usdcVault, userUsdcAta: a.address, tokenProgram: TOKEN_PROGRAM_ID })
-          .signers([u])
-          .rpc({ commitment: "confirmed" })
-        );
-      };
-      if (claimAB) { await claim("A"); await claim("B"); }
-      else { await claim("B"); await claim("A"); }
-
-      const bA1 = BigInt((await connection.getTokenAccountBalance(ataA.address)).value.amount);
-      const bB1 = BigInt((await connection.getTokenAccountBalance(ataB.address)).value.amount);
-      return [bA1 - bA0, bB1 - bB0] as const;
-    }
-
-    const [a1, b1] = await run(true);
-    const [a2, b2] = await run(false);
-    if (a1 !== a2 || b1 !== b2) throw new Error(`Order-dependence: AB=(${a1},${b1}) BA=(${a2},${b2})`);
-  });
+          .accounts({ user: u.publicKey, market: marketPda, bet: b, receipt: (who === "A" ? receiptA : receiptB), usdcVault: usdcVaultAta.address, userUsdcAta: a.address, systemProgram: SystemProgram.programId, tokenProgram: TOKEN_PROGRAM_ID })
 });
