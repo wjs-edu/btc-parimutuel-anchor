@@ -1,4 +1,4 @@
-name: Devnet Green (vFinal A1–A5)
+name: Devnet Green (vFinal A1-A5)
 
 on:
   pull_request:
@@ -12,15 +12,20 @@ jobs:
     timeout-minutes: 60
     env:
       ANCHOR_PROVIDER_URL: https://api.devnet.solana.com
+    defaults:
+      run:
+        working-directory: btc_parimutuel
     steps:
       - uses: actions/checkout@v4
-
       - uses: actions/setup-node@v4
         with:
           node-version: "20"
 
       - name: Install Yarn deps
         run: yarn install --frozen-lockfile
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
 
       - name: Install Solana CLI
         run: |
