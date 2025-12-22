@@ -149,8 +149,7 @@ describe("A2 commit_vfinal", () => {
             rent: anchor.web3.SYSVAR_RENT_PUBKEY,
           })
           .rpc({ commitment: "confirmed" })
-      );
-    } catch (e: any) {
+      ));} catch (e: any) {
       threw = true;
       const msg = String(e?.message || e);
       assert(/Dominance cap|DominanceCapExceeded/i.test(msg), msg);
