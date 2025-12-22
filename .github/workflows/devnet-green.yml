@@ -12,11 +12,14 @@ jobs:
     timeout-minutes: 60
     env:
       ANCHOR_PROVIDER_URL: https://api.devnet.solana.com
+
     defaults:
       run:
         working-directory: btc_parimutuel
+
     steps:
       - uses: actions/checkout@v4
+
       - uses: actions/setup-node@v4
         with:
           node-version: "20"
@@ -35,8 +38,24 @@ jobs:
 
       - name: Install Solana CLI
         run: |
-          sh -c "$(curl -sSfL https://release.solana.com/stable/install)"
+          set -euo pipefail
+          install_ok=0
+
+          echo "Attempt 1: release.solana.com"
+          if curl -sSfL --retry 5 --retry-delay 2 https://release.solana.com/stable/install | bash; then
+            install_ok=1
+          fi
+
+          if [ "$install_ok" -ne 1 ]; then
+            echo "Attempt 2: GitHub-hosted installer fallback"
+            curl -sSfL --retry 5 --retry-delay 2 \
+              https://raw.githubusercontent.com/solana-labs/solana/master/install/solana-install-init.sh \
+              -o solana-install-init.sh
+            bash solana-install-init.sh stable
+          fi
+
           echo "$HOME/.local/share/solana/install/active_release/bin" >> $GITHUB_PATH
+          export PATH="$HOME/.local/share/solana/install/active_release/bin:$PATH"
           solana --version
 
       - name: Install Anchor (0.32.1)
