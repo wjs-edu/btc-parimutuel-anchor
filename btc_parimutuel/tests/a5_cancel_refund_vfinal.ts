@@ -39,10 +39,6 @@ async function tokenBal(connection: anchor.web3.Connection, ata: PublicKey): Pro
 }
 
 
-async function awaitBarrier(connection: anchor.web3.Connection) {
-  const slot = await connection.getSlot("confirmed");
-  await connection.getBlockTime(slot);
-}
 async function expectFailContains(p: Promise<any>, needle: string) {
   let threw = false;
   try {
@@ -303,9 +299,6 @@ it("A5.3 refund succeeds once; second call cannot change balances (idempotent)",
   assert(u2 === u2b, "second refund must not pay again");
   assert(v2 === v2b, "second refund must not drain vault");
 });
-
-    await awaitBarrier(connection);
-
 it("A5.4 order independence (A->B == B->A) + vault conservation", async () => {
     const marketId = marketIdFromLabel("tests/a5_cancel_refund_vfinal.ts#A5.4");
   async function run(order: "AB" | "BA") {
@@ -400,8 +393,6 @@ it("A5.4 order independence (A->B == B->A) + vault conservation", async () => {
     );
 
     if (order === "AB") { await rA(); await rB(); } else { await rB(); await rA(); }
-      await awaitBarrier(connection);
-
       const a1 = await tokenBal(connection, ataA.address);
     const b1 = await tokenBal(connection, ataB.address);
     const v1 = await tokenBal(connection, commitVaultAta);
