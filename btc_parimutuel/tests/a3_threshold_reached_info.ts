@@ -16,6 +16,8 @@ describe("A3 threshold reached (informational only)", () => {
 
   it("threshold can be reached pre-close without exceeding per-user cap (label only)", async () => {
     const marketIdLe = Buffer.alloc(8);
+    const marketId = marketIdFromLabel("tests/a3_threshold_reached_info.ts");
+
     marketIdLe.writeBigUInt64LE(BigInt(marketId.toString()));
 
     const [marketPda] = PublicKey.findProgramAddressSync(

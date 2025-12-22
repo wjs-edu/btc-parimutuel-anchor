@@ -15,6 +15,8 @@ describe("A4 settle at commit close (OPEN)", () => {
 
   it("does not settle early; settles once after close", async () => {
     const marketIdLe = Buffer.alloc(8);
+    const marketId = marketIdFromLabel("tests/a4_settle_open_at_close.ts");
+
     marketIdLe.writeBigUInt64LE(BigInt(marketId.toString()));
     const [marketPda] = PublicKey.findProgramAddressSync([Buffer.from("market_v1"), marketIdLe], program.programId);
     const [commitPoolPda] = PublicKey.findProgramAddressSync([Buffer.from("commit_pool_v1"), marketPda.toBuffer()], program.programId);

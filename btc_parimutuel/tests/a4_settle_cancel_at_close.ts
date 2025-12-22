@@ -15,6 +15,8 @@ describe("A4 settle at commit close (CANCEL)", () => {
 
   it("settles once after close when below threshold", async () => {
     const marketIdLe = Buffer.alloc(8);
+    const marketId = marketIdFromLabel("tests/a4_settle_cancel_at_close.ts");
+
     marketIdLe.writeBigUInt64LE(BigInt(marketId.toString()));
 
     const [marketPda] = PublicKey.findProgramAddressSync([Buffer.from("market_v1"), marketIdLe], program.programId);

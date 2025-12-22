@@ -15,6 +15,8 @@ describe("A1 publish_market_vfinal", () => {
     const conn = provider.connection;
     const now = (await conn.getBlockTime(await conn.getSlot("confirmed"))) ?? Math.floor(Date.now() / 1000);
     const marketIdLe = marketId.toArrayLike(Buffer, "le", 8);
+    const marketId = marketIdFromLabel("tests/a1_publish_market.ts");
+
     const [marketPda] = PublicKey.findProgramAddressSync([Buffer.from("market_v1"), marketIdLe], program.programId);
 
     const args = {
