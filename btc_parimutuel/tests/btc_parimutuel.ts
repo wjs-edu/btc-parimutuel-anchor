@@ -1,7 +1,7 @@
 import * as anchor from "@coral-xyz/anchor";
 import { Program } from "@coral-xyz/anchor";
 import { PublicKey, SystemProgram, SYSVAR_RENT_PUBKEY, Keypair, LAMPORTS_PER_SOL } from "@solana/web3.js";
-import { createMint, getOrCreateAssociatedTokenAccount, mintTo, getAccount, TOKEN_PROGRAM_ID } from "@solana/spl-token";
+import { createMint, getOrCreateAssociatedTokenAccount, mintTo, getAccount, getAssociatedTokenAddressSync, createAssociatedTokenAccountIdempotent, TOKEN_PROGRAM_ID } from "@solana/spl-token";
 import { waitForAccount } from "./utils/rpc";
 
 process.env.ANCHOR_PROVIDER_URL = process.env.ANCHOR_PROVIDER_URL || "https://api.devnet.solana.com";
@@ -42,9 +42,11 @@ describe("btc_parimutuel devnet smoke", () => {
     );
 
     const tokenMint = await createMint(connection, payer, admin, null, 6);
-    const usdcVaultAta = await getOrCreateAssociatedTokenAccount(connection, payer, tokenMint, marketPda, true);
-    await waitForAccount(connection, usdcVaultAta.address);
-    await getAccount(connection, usdcVaultAta.address);
+    const marketVaultAta = getAssociatedTokenAddressSync(tokenMint, marketPda, true);
+    await createAssociatedTokenAccountIdempotent(connection, payer, tokenMint, marketPda, { commitment: "confirmed" });
+    await getAccount(connection, marketVaultAta);
+    await waitForAccount(connection, marketVaultAta);
+    await getAccount(connection, marketVaultAta);
     const feeVaultAta = await getOrCreateAssociatedTokenAccount(connection, payer, tokenMint, admin);
     const creatorFeeVaultAta = await getOrCreateAssociatedTokenAccount(connection, payer, tokenMint, admin);
 
@@ -76,7 +78,7 @@ describe("btc_parimutuel devnet smoke", () => {
           .accounts({
             admin,
             market: marketPda,
-            usdcVault: usdcVaultAta.address,
+            usdcVault: marketVaultAta,
             feeVault: feeVaultAta.address,
             creatorFeeVault: creatorFeeVaultAta.address,
             tokenMint,
@@ -145,7 +147,7 @@ describe("btc_parimutuel devnet smoke", () => {
           userUsdcAta: userAta.address,
           market: marketPda,
           bet: betPda,
-          usdcVault: usdcVaultAta.address,
+          usdcVault: marketVaultAta,
           tokenProgram: TOKEN_PROGRAM_ID,
           systemProgram: SystemProgram.programId,
           rent: SYSVAR_RENT_PUBKEY,
@@ -173,7 +175,7 @@ describe("btc_parimutuel devnet smoke", () => {
         .accounts({
           admin: admin,
           market: marketPda,
-          usdcVault: usdcVaultAta.address,
+          usdcVault: marketVaultAta,
           feeVault: feeVaultAta.address,
           creatorFeeVault: creatorFeeVaultAta.address,
           tokenProgram: TOKEN_PROGRAM_ID,
@@ -185,7 +187,7 @@ describe("btc_parimutuel devnet smoke", () => {
     const claimTx = await rpcRetry(() =>
       (program as any).methods
         .claimPayout(marketId)
-      .accounts({ user: userKp.publicKey, market: marketPda, bet: betPda, receipt: receiptPda, usdcVault: usdcVaultAta.address, userUsdcAta: userAta.address, systemProgram: SystemProgram.programId, tokenProgram: TOKEN_PROGRAM_ID })
+      .accounts({ user: userKp.publicKey, market: marketPda, bet: betPda, receipt: receiptPda, usdcVault: marketVaultAta, userUsdcAta: userAta.address, systemProgram: SystemProgram.programId, tokenProgram: TOKEN_PROGRAM_ID })
         .signers([userKp])
         .rpc({ commitment: "confirmed" })
     );
