@@ -1,0 +1,18 @@
+# Devnet Green Contract (Phase A6)
+
+## Default devnet gate
+`yarn test:devnet` runs vFinal A1–A6 only (tests/manifest.devnet.json).
+
+Classic suites do NOT run on devnet by default.
+
+## Determinism rules
+- Devnet tests must not assume clean slate.
+- Market IDs must be deterministic and namespaced:
+  - per-suite for independent suites
+  - per-it for multi-it suites that mutate shared state (e.g. A5)
+
+## Policy checks
+Before merging:
+- ./scripts/test_audit.sh must pass
+- No describe.only / it.only
+- No permanent describe.skip / it.skip (runtime cluster-gates only)
