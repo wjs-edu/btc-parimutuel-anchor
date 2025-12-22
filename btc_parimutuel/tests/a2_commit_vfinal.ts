@@ -133,23 +133,26 @@ describe("A2 commit_vfinal", () => {
   it("enforces dominance cap (Proof: 2500 USDC cap)", async () => {
     let threw = false;
     try {
-      await withBlockhashRetry("A2 dominance-cap", () => rpcRetry(() =>
-        program.methods
-          .commitVfinal(marketId, 1, new anchor.BN(2_000_000_000))
-          .accounts({
-            user: admin,
-            market: marketPda,
-            commitPool: commitPoolPda,
-            commitVault: commitVaultPda,
-            commitment: commitmentPda,
-            userUsdcAta: userAta,
-            usdcMint,
-            systemProgram: SystemProgram.programId,
-            tokenProgram: TOKEN_PROGRAM_ID,
-            rent: anchor.web3.SYSVAR_RENT_PUBKEY,
-          })
-          .rpc({ commitment: "confirmed" })
-      ));} catch (e: any) {
+      await withBlockhashRetry("A2 dominance-cap", () =>
+        rpcRetry(() =>
+          program.methods
+            .commitVfinal(marketId, 1, new anchor.BN(2_000_000_000))
+            .accounts({
+              user: admin,
+              market: marketPda,
+              commitPool: commitPoolPda,
+              commitVault: commitVaultPda,
+              commitment: commitmentPda,
+              userUsdcAta: userAta,
+              usdcMint,
+              systemProgram: SystemProgram.programId,
+              tokenProgram: TOKEN_PROGRAM_ID,
+              rent: anchor.web3.SYSVAR_RENT_PUBKEY,
+            })
+            .rpc({ commitment: "confirmed" })
+        )
+      );
+    } catch (e: any) {
       threw = true;
       const msg = String(e?.message || e);
       assert(/Dominance cap|DominanceCapExceeded/i.test(msg), msg);
