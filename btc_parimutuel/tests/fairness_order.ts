@@ -1,7 +1,7 @@
 import * as anchor from "@coral-xyz/anchor";
 import { Program } from "@coral-xyz/anchor";
 import { Keypair, PublicKey, SystemProgram, SYSVAR_RENT_PUBKEY, LAMPORTS_PER_SOL } from "@solana/web3.js";
-import { createMint, getOrCreateAssociatedTokenAccount, mintTo, getAccount, TOKEN_PROGRAM_ID } from "@solana/spl-token";
+import { createMint, getOrCreateAssociatedTokenAccount, mintTo, getAccount, getAssociatedTokenAddressSync, createAssociatedTokenAccountIdempotent, TOKEN_PROGRAM_ID } from "@solana/spl-token";
 
 async function rpcRetry<T>(fn: () => Promise<T>, tries = 6) {
   let lastErr: any;
@@ -29,9 +29,11 @@ describe("fairness (devnet)", () => {
       const marketIdLe = marketId.toArrayLike(Buffer, "le", 8);
       const [marketPda] = PublicKey.findProgramAddressSync([Buffer.from("market"), marketIdLe], program.programId);
       const tokenMint = await createMint(connection, payer, admin, null, 6);
-      const usdcVaultAta = await getOrCreateAssociatedTokenAccount(connection, payer, tokenMint, marketPda, true);
-      await waitForAccount(connection, usdcVaultAta.address);
-      await getAccount(connection, usdcVaultAta.address);
+      const marketVaultAta = getAssociatedTokenAddressSync(tokenMint, marketPda, true);
+      await createAssociatedTokenAccountIdempotent(connection, payer, tokenMint, marketPda, { commitment: "confirmed" });
+      await getAccount(connection, marketVaultAta);
+      await waitForAccount(connection, marketVaultAta);
+      await getAccount(connection, marketVaultAta);
       const feeVaultAta = await getOrCreateAssociatedTokenAccount(connection, payer, tokenMint, admin);
       const creatorFeeVaultAta = await getOrCreateAssociatedTokenAccount(connection, payer, tokenMint, admin);
 
@@ -43,7 +45,7 @@ describe("fairness (devnet)", () => {
         .accounts({
           admin,
           market: marketPda,
-          usdcVault: usdcVaultAta.address,
+          usdcVault: marketVaultAta,
           feeVault: feeVaultAta.address,
           creatorFeeVault: creatorFeeVaultAta.address,
           tokenMint,
@@ -78,13 +80,13 @@ describe("fairness (devnet)", () => {
       const [receiptB] = PublicKey.findProgramAddressSync([Buffer.from("receipt_v1"), betB.toBuffer()], program.programId);
       await rpcRetry(() => (program as any).methods
         .placeBet(marketId, 1, new anchor.BN(1_000_000))
-        .accounts({ user: userA.publicKey, userUsdcAta: ataA.address, market: marketPda, bet: betA, usdcVault: usdcVaultAta.address, tokenProgram: TOKEN_PROGRAM_ID, systemProgram: SystemProgram.programId, rent: SYSVAR_RENT_PUBKEY })
+        .accounts({ user: userA.publicKey, userUsdcAta: ataA.address, market: marketPda, bet: betA, usdcVault: marketVaultAta, tokenProgram: TOKEN_PROGRAM_ID, systemProgram: SystemProgram.programId, rent: SYSVAR_RENT_PUBKEY })
         .signers([userA])
         .rpc({ commitment: "confirmed" })
       );
       await rpcRetry(() => (program as any).methods
         .placeBet(marketId, 1, new anchor.BN(1_000_000))
-        .accounts({ user: userB.publicKey, userUsdcAta: ataB.address, market: marketPda, bet: betB, usdcVault: usdcVaultAta.address, tokenProgram: TOKEN_PROGRAM_ID, systemProgram: SystemProgram.programId, rent: SYSVAR_RENT_PUBKEY })
+        .accounts({ user: userB.publicKey, userUsdcAta: ataB.address, market: marketPda, bet: betB, usdcVault: marketVaultAta, tokenProgram: TOKEN_PROGRAM_ID, systemProgram: SystemProgram.programId, rent: SYSVAR_RENT_PUBKEY })
         .signers([userB])
         .rpc({ commitment: "confirmed" })
       );
@@ -94,10 +96,10 @@ describe("fairness (devnet)", () => {
       await new Promise(r => setTimeout(r, waitSec * 1000));
 
       const m2 = await (program as any).account.market.fetch(marketPda);
-      await getAccount(connection, usdcVaultAta.address);
+      await getAccount(connection, marketVaultAta);
       await rpcRetry(() => (program as any).methods
         .resolveMarket(marketId, 1)
-        .accounts({ admin, market: marketPda, usdcVault: usdcVaultAta.address, feeVault: feeVaultAta.address, creatorFeeVault: creatorFeeVaultAta.address, tokenProgram: TOKEN_PROGRAM_ID })
+        .accounts({ admin, market: marketPda, usdcVault: marketVaultAta, feeVault: feeVaultAta.address, creatorFeeVault: creatorFeeVaultAta.address, tokenProgram: TOKEN_PROGRAM_ID })
         .rpc({ commitment: "confirmed" })
       );
       const bA0 = BigInt((await connection.getTokenAccountBalance(ataA.address)).value.amount);
@@ -107,10 +109,10 @@ describe("fairness (devnet)", () => {
         const u = who === "A" ? userA : userB;
         const b = who === "A" ? betA : betB;
         const a = who === "A" ? ataA : ataB;
-        await getAccount(connection, usdcVaultAta.address);
+        await getAccount(connection, marketVaultAta);
         await rpcRetry(() => (program as any).methods
           .claimPayout(marketId)
-          .accounts({ user: u.publicKey, market: marketPda, bet: b, receipt: (who === "A" ? receiptA : receiptB), usdcVault: usdcVaultAta.address, userUsdcAta: a.address, systemProgram: SystemProgram.programId, tokenProgram: TOKEN_PROGRAM_ID })
+          .accounts({ user: u.publicKey, market: marketPda, bet: b, receipt: (who === "A" ? receiptA : receiptB), usdcVault: marketVaultAta, userUsdcAta: a.address, systemProgram: SystemProgram.programId, tokenProgram: TOKEN_PROGRAM_ID })
           .signers([u])
           .rpc({ commitment: "confirmed" })
         );
