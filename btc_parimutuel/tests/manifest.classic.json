@@ -1,4 +1,4 @@
 [
-  "tests/btc_parimutuel.ts",
+  "tests/classic_smoke.ts",
   "tests/fairness_order.ts"
 ]
