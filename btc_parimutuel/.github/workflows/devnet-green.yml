@@ -1,0 +1,48 @@
+name: Devnet Green (vFinal A1–A5)
+
+on:
+  pull_request:
+    branches: [ main ]
+  push:
+    branches: [ main ]
+
+jobs:
+  devnet-green:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      ANCHOR_PROVIDER_URL: https://api.devnet.solana.com
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install Yarn deps
+        run: yarn install --frozen-lockfile
+
+      - name: Install Solana CLI
+        run: |
+          sh -c "$(curl -sSfL https://release.solana.com/stable/install)"
+          echo "$HOME/.local/share/solana/install/active_release/bin" >> $GITHUB_PATH
+          solana --version
+
+      - name: Install Anchor (0.32.1)
+        run: |
+          cargo install --git https://github.com/coral-xyz/anchor avm --locked
+          avm install 0.32.1
+          avm use 0.32.1
+          anchor --version
+
+      - name: Write devnet keypair
+        run: |
+          echo '${{ secrets.DEVNET_KEYPAIR_JSON }}' > ./ci-devnet-keypair.json
+          chmod 600 ./ci-devnet-keypair.json
+          echo "ANCHOR_WALLET=$PWD/ci-devnet-keypair.json" >> $GITHUB_ENV
+
+      - name: Audit
+        run: ./scripts/test_audit.sh
+
+      - name: Devnet tests (manifest)
+        run: yarn test:devnet
