@@ -5,6 +5,27 @@ import { marketIdFromLabel } from "./utils/runSalt";
 import assert from "assert";
 
 function sleep(ms: number) { return new Promise((r) => setTimeout(r, ms)); }
+
+function isBlockhashFlake(e: any): boolean {
+  const msg = String(e?.message ?? e);
+  return msg.includes("Blockhash not found") || msg.includes("blockhash not found");
+}
+
+async function withBlockhashRetry<T>(label: string, fn: () => Promise<T>, max = 5): Promise<T> {
+  let last: any;
+  for (let i = 0; i <= max; i++) {
+    try {
+      return await fn();
+    } catch (e) {
+      last = e;
+      if (!isBlockhashFlake(e) || i === max) break;
+      console.warn(`[blockhashRetry] ${label} retry ${i + 1}/${max}`);
+      await new Promise((r) => setTimeout(r, 400 * (i + 1)));
+    }
+  }
+  throw last;
+}
+
 async function rpcRetry<T>(fn: () => Promise<T>, retries = 6) {
   let lastErr: any;
   for (let i = 0; i < retries; i++) {
@@ -112,7 +133,7 @@ describe("A2 commit_vfinal", () => {
   it("enforces dominance cap (Proof: 2500 USDC cap)", async () => {
     let threw = false;
     try {
-      await rpcRetry(() =>
+      await withBlockhashRetry("A2 dominance-cap", () => rpcRetry(() =>
         program.methods
           .commitVfinal(marketId, 1, new anchor.BN(2_000_000_000))
           .accounts({
