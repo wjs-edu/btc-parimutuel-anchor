@@ -59,6 +59,7 @@ jobs:
           URL="https://github.com/solana-labs/solana/releases/download/v${SOLANA_VER}/${TARBALL}"
           curl -L --retry 5 --retry-delay 2 -o "${TARBALL}" "${URL}"
           tar -xjf "${TARBALL}"
+          export PATH="${PWD}/solana-release/bin:${PATH}"
           echo "${PWD}/solana-release/bin" >> $GITHUB_PATH
           solana --version
 
