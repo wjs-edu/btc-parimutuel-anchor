@@ -21,10 +21,8 @@ jobs:
         with:
           node-version: "20"
 
-      - name: Enable Yarn
-        run: |
-          corepack enable
-          corepack prepare yarn.22.22 --activate
+      - name: Install Yarn 1.x
+        run: npm i -g yarn@1.22.22
 
       - name: Ensure scripts executable
         run: chmod +x scripts/*.sh tests/run_with_retry.sh
