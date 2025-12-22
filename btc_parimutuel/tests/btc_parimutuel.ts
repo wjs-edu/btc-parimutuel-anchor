@@ -1,8 +1,8 @@
-import { strict as assert } from "assert";
 import * as anchor from "@coral-xyz/anchor";
 import { Program } from "@coral-xyz/anchor";
 import { PublicKey, SystemProgram, SYSVAR_RENT_PUBKEY, Keypair, LAMPORTS_PER_SOL } from "@solana/web3.js";
 import { createMint, getOrCreateAssociatedTokenAccount, mintTo, getAccount, TOKEN_PROGRAM_ID } from "@solana/spl-token";
+import { waitForAccount } from "./utils/rpc";
 
 process.env.ANCHOR_PROVIDER_URL = process.env.ANCHOR_PROVIDER_URL || "https://api.devnet.solana.com";
 process.env.ANCHOR_WALLET = process.env.ANCHOR_WALLET || (process.env.HOME + "/.config/solana/id.json");
@@ -112,7 +112,7 @@ describe("btc_parimutuel devnet smoke", () => {
       SystemProgram.transfer({
         fromPubkey: admin,
         toPubkey: userKp.publicKey,
-        lamports: Math.floor(0.005 * LAMPORTS_PER_SOL),
+        lamports: Math.floor(0.05 * LAMPORTS_PER_SOL),
       })
     );
     const sig = await rpcRetry(() => provider.sendAndConfirm(tx, [], { commitment: "confirmed" }));
@@ -168,7 +168,6 @@ describe("btc_parimutuel devnet smoke", () => {
     const before = (await connection.getTokenAccountBalance(userAta.address)).value.amount;
 
     const resolveTx = await rpcRetry(() =>
-    await getAccount(connection, usdcVaultAta.address);
       (program as any).methods
         .resolveMarket(marketId, 1) // outcome=1 (UP)
         .accounts({
@@ -184,7 +183,6 @@ describe("btc_parimutuel devnet smoke", () => {
     console.log("resolveMarket tx:", resolveTx);
 
     const claimTx = await rpcRetry(() =>
-    await getAccount(connection, usdcVaultAta.address);
       (program as any).methods
         .claimPayout(marketId)
       .accounts({ user: userKp.publicKey, market: marketPda, bet: betPda, receipt: receiptPda, usdcVault: usdcVaultAta.address, userUsdcAta: userAta.address, systemProgram: SystemProgram.programId, tokenProgram: TOKEN_PROGRAM_ID })
@@ -193,7 +191,8 @@ describe("btc_parimutuel devnet smoke", () => {
     );
     console.log("claimPayout tx:", claimTx);
     const info = await provider.connection.getAccountInfo(receiptPda, "confirmed");
-    assert(info !== null, "expected receipt PDA account to exist after claim");
+    const _ = info; // keep for clarity
+    if (info === null) throw new Error("expected receipt PDA account to exist after claim");
 
     const after = (await connection.getTokenAccountBalance(userAta.address)).value.amount;
     console.log("user ATA balance before/after:", before, after);
@@ -202,4 +201,3 @@ describe("btc_parimutuel devnet smoke", () => {
 
   });
 });
-import { waitForAccount } from "./utils/rpc";
