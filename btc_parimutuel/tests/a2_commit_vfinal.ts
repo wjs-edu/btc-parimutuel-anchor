@@ -2,6 +2,7 @@ import * as anchor from "@coral-xyz/anchor";
 import { PublicKey, SystemProgram } from "@solana/web3.js";
 import { createMint, getOrCreateAssociatedTokenAccount, mintTo, getAccount, TOKEN_PROGRAM_ID } from "@solana/spl-token";
 import assert from "assert";
+import { marketIdFromLabel } from "./utils/runSalt";
 
 function sleep(ms: number) { return new Promise((r) => setTimeout(r, ms)); }
 async function rpcRetry<T>(fn: () => Promise<T>, retries = 6) {
@@ -20,7 +21,7 @@ describe("A2 commit_vfinal", () => {
   const connection = provider.connection;
   const payer = (provider.wallet as any).payer;
 
-  const marketId = new anchor.BN(Date.now() % 1_000_000_000);
+  const marketId = marketIdFromLabel("tests/a2_commit_vfinal.ts");
   const marketIdLe = Buffer.alloc(8);
   marketIdLe.writeBigUInt64LE(BigInt(marketId.toString()));
   const [marketPda] = PublicKey.findProgramAddressSync([Buffer.from("market_v1"), marketIdLe], program.programId);

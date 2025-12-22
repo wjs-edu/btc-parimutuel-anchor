@@ -4,6 +4,7 @@ import { createMint, getOrCreateAssociatedTokenAccount, mintTo, getAccount, TOKE
 import assert from "assert";
 import { isThresholdReachedInfo } from "./utils/a3_threshold";
 import { rpcRetry, sendAndConfirmRetry } from "./utils/rpc";
+import { marketIdFromLabel } from "./utils/runSalt";
 
 describe("A3 threshold reached (informational only)", () => {
   const provider = anchor.AnchorProvider.env();
@@ -14,7 +15,7 @@ describe("A3 threshold reached (informational only)", () => {
   const payer = (provider.wallet as any).payer;
 
   it("threshold can be reached pre-close without exceeding per-user cap (label only)", async () => {
-    const marketId = new anchor.BN(Date.now() % 1_000_000_000);
+    const marketId = marketIdFromLabel("tests/a3_threshold_reached_info.ts");
     const marketIdLe = Buffer.alloc(8);
     marketIdLe.writeBigUInt64LE(BigInt(marketId.toString()));
 

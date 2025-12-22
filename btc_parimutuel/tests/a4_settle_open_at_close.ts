@@ -3,6 +3,7 @@ import { PublicKey, SystemProgram, Keypair, LAMPORTS_PER_SOL } from "@solana/web
 import { createMint, getOrCreateAssociatedTokenAccount, mintTo, TOKEN_PROGRAM_ID } from "@solana/spl-token";
 import assert from "assert";
 import { rpcRetry, sendAndConfirmRetry } from "./utils/rpc";
+import { marketIdFromLabel } from "./utils/runSalt";
 
 describe("A4 settle at commit close (OPEN)", () => {
   const provider = anchor.AnchorProvider.env();
@@ -13,7 +14,7 @@ describe("A4 settle at commit close (OPEN)", () => {
   const payer = (provider.wallet as any).payer;
 
   it("does not settle early; settles once after close", async () => {
-    const marketId = new anchor.BN(Date.now() % 1_000_000_000);
+    const marketId = marketIdFromLabel("tests/a4_settle_open_at_close.ts");
     const marketIdLe = Buffer.alloc(8);
     marketIdLe.writeBigUInt64LE(BigInt(marketId.toString()));
     const [marketPda] = PublicKey.findProgramAddressSync([Buffer.from("market_v1"), marketIdLe], program.programId);
