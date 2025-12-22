@@ -199,3 +199,4 @@ describe("btc_parimutuel devnet smoke", () => {
 
   });
 });
+import { waitForAccount } from "./utils/rpc";

@@ -125,3 +125,4 @@ describe("fairness (devnet)", () => {
     if (a1 !== a2 || b1 !== b2) throw new Error(`Order-dependence: AB=(${a1},${b1}) BA=(${a2},${b2})`);
   });
 });
+import { waitForAccount } from "./utils/rpc";
