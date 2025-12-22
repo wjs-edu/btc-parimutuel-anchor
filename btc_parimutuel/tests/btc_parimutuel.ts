@@ -43,6 +43,7 @@ describe("btc_parimutuel devnet smoke", () => {
 
     const tokenMint = await createMint(connection, payer, admin, null, 6);
     const usdcVaultAta = await getOrCreateAssociatedTokenAccount(connection, payer, tokenMint, marketPda, true);
+    await waitForAccount(connection, usdcVaultAta.address);
     const feeVaultAta = await getOrCreateAssociatedTokenAccount(connection, payer, tokenMint, admin);
     const creatorFeeVaultAta = await getOrCreateAssociatedTokenAccount(connection, payer, tokenMint, admin);
 
