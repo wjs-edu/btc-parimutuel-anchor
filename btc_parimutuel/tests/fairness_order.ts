@@ -55,8 +55,8 @@ describe("fairness (devnet)", () => {
       const userA = Keypair.generate();
       const userB = Keypair.generate();
       const fundTx = new anchor.web3.Transaction().add(
-        SystemProgram.transfer({ fromPubkey: admin, toPubkey: userA.publicKey, lamports: Math.floor(0.05 * LAMPORTS_PER_SOL) }),
-        SystemProgram.transfer({ fromPubkey: admin, toPubkey: userB.publicKey, lamports: Math.floor(0.05 * LAMPORTS_PER_SOL) })
+        SystemProgram.transfer({ fromPubkey: admin, toPubkey: userA.publicKey, lamports: Math.floor(0.005 * LAMPORTS_PER_SOL) }),
+        SystemProgram.transfer({ fromPubkey: admin, toPubkey: userB.publicKey, lamports: Math.floor(0.005 * LAMPORTS_PER_SOL) })
       );
       await rpcRetry(() => provider.sendAndConfirm(fundTx, [], { commitment: "confirmed" }));
 

@@ -76,7 +76,7 @@ describe("A3 threshold reached (informational only)", () => {
         SystemProgram.transfer({
           fromPubkey: admin,
           toPubkey: kp.publicKey,
-          lamports: Math.floor(0.05 * LAMPORTS_PER_SOL),
+          lamports: Math.floor(0.005 * LAMPORTS_PER_SOL),
         })
       );
       await sendAndConfirmRetry(provider, tx, [], { commitment: "confirmed" });
