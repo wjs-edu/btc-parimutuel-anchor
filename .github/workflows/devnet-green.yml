@@ -36,26 +36,16 @@ jobs:
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
 
-      - name: Install Solana CLI
+      - name: Install Solana CLI (pinned)
         run: |
           set -euo pipefail
-          install_ok=0
-
-          echo "Attempt 1: release.solana.com"
-          if curl -sSfL --retry 5 --retry-delay 2 https://release.solana.com/stable/install | bash; then
-            install_ok=1
-          fi
-
-          if [ "$install_ok" -ne 1 ]; then
-            echo "Attempt 2: GitHub-hosted installer fallback"
-            curl -sSfL --retry 5 --retry-delay 2 \
-              https://raw.githubusercontent.com/solana-labs/solana/master/install/solana-install-init.sh \
-              -o solana-install-init.sh
-            bash solana-install-init.sh stable
-          fi
-
-          echo "$HOME/.local/share/solana/install/active_release/bin" >> $GITHUB_PATH
-          export PATH="$HOME/.local/share/solana/install/active_release/bin:$PATH"
+          SOLANA_VERSION="v1.18.26"
+          curl -sSfL --retry 5 --retry-delay 2 \
+            "https://github.com/solana-labs/solana/releases/download/${SOLANA_VERSION}/solana-release-x86_64-unknown-linux-gnu.tar.bz2" \
+            -o solana.tar.bz2
+          tar -xjf solana.tar.bz2
+          echo "$PWD/solana-release/bin" >> $GITHUB_PATH
+          export PATH="$PWD/solana-release/bin:$PATH"
           solana --version
 
       - name: Install Anchor (0.32.1)
