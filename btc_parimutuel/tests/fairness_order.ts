@@ -1,7 +1,7 @@
 import * as anchor from "@coral-xyz/anchor";
 import { Program } from "@coral-xyz/anchor";
 import { Keypair, PublicKey, SystemProgram, SYSVAR_RENT_PUBKEY, LAMPORTS_PER_SOL } from "@solana/web3.js";
-import { createMint, getOrCreateAssociatedTokenAccount, mintTo, TOKEN_PROGRAM_ID } from "@solana/spl-token";
+import { createMint, getOrCreateAssociatedTokenAccount, mintTo, getAccount, TOKEN_PROGRAM_ID } from "@solana/spl-token";
 
 async function rpcRetry<T>(fn: () => Promise<T>, tries = 6) {
   let lastErr: any;
@@ -31,6 +31,7 @@ describe("fairness (devnet)", () => {
       const tokenMint = await createMint(connection, payer, admin, null, 6);
       const usdcVaultAta = await getOrCreateAssociatedTokenAccount(connection, payer, tokenMint, marketPda, true);
       await waitForAccount(connection, usdcVaultAta.address);
+      await getAccount(connection, usdcVaultAta.address);
       const feeVaultAta = await getOrCreateAssociatedTokenAccount(connection, payer, tokenMint, admin);
       const creatorFeeVaultAta = await getOrCreateAssociatedTokenAccount(connection, payer, tokenMint, admin);
 

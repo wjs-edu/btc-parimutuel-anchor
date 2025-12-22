@@ -2,7 +2,7 @@ import { strict as assert } from "assert";
 import * as anchor from "@coral-xyz/anchor";
 import { Program } from "@coral-xyz/anchor";
 import { PublicKey, SystemProgram, SYSVAR_RENT_PUBKEY, Keypair, LAMPORTS_PER_SOL } from "@solana/web3.js";
-import { createMint, getOrCreateAssociatedTokenAccount, mintTo, TOKEN_PROGRAM_ID } from "@solana/spl-token";
+import { createMint, getOrCreateAssociatedTokenAccount, mintTo, getAccount, TOKEN_PROGRAM_ID } from "@solana/spl-token";
 
 process.env.ANCHOR_PROVIDER_URL = process.env.ANCHOR_PROVIDER_URL || "https://api.devnet.solana.com";
 process.env.ANCHOR_WALLET = process.env.ANCHOR_WALLET || (process.env.HOME + "/.config/solana/id.json");
@@ -44,6 +44,7 @@ describe("btc_parimutuel devnet smoke", () => {
     const tokenMint = await createMint(connection, payer, admin, null, 6);
     const usdcVaultAta = await getOrCreateAssociatedTokenAccount(connection, payer, tokenMint, marketPda, true);
     await waitForAccount(connection, usdcVaultAta.address);
+    await getAccount(connection, usdcVaultAta.address);
     const feeVaultAta = await getOrCreateAssociatedTokenAccount(connection, payer, tokenMint, admin);
     const creatorFeeVaultAta = await getOrCreateAssociatedTokenAccount(connection, payer, tokenMint, admin);
 
