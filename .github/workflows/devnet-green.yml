@@ -21,6 +21,14 @@ jobs:
         with:
           node-version: "20"
 
+      - name: Enable Yarn
+        run: |
+          corepack enable
+          corepack prepare yarn.22.22 --activate
+
+      - name: Ensure scripts executable
+        run: chmod +x scripts/*.sh tests/run_with_retry.sh
+
       - name: Install Yarn deps
         run: yarn install --frozen-lockfile
 
