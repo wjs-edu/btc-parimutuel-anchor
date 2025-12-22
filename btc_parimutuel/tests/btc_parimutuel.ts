@@ -20,7 +20,7 @@ async function rpcRetry<T>(fn: () => Promise<T>, tries = 6) {
   throw lastErr;
 }
 
-describe.skip("btc_parimutuel devnet smoke", () => {
+describe("btc_parimutuel devnet smoke", () => {
   const provider = anchor.AnchorProvider.env();
   anchor.setProvider(provider);
   const program = anchor.workspace.BtcParimutuel as Program;
