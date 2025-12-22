@@ -50,6 +50,8 @@ async function expectFailContains(p: Promise<any>, needle: string) {
 }
 
 describe("A5 cancel refund + recovery (vFinal)", () => {
+  const marketId = marketIdFromLabel("tests/a5_cancel_refund_vfinal.ts");
+
   const provider = anchor.AnchorProvider.env();
   anchor.setProvider(provider);
   const program = anchor.workspace.BtcParimutuel as anchor.Program<any>;
