@@ -1,9 +1,9 @@
 import * as anchor from "@coral-xyz/anchor";
 import { PublicKey, SystemProgram } from "@solana/web3.js";
 import { createMint, getOrCreateAssociatedTokenAccount, mintTo, TOKEN_PROGRAM_ID } from "@solana/spl-token";
+import { marketIdFromLabel } from "./utils/runSalt";
 import assert from "assert";
 import { rpcRetry } from "./utils/rpc";
-import { marketIdFromLabel } from "./utils/runSalt";
 
 describe("A4 settle at commit close (CANCEL)", () => {
   const provider = anchor.AnchorProvider.env();
@@ -14,7 +14,6 @@ describe("A4 settle at commit close (CANCEL)", () => {
   const payer = (provider.wallet as any).payer;
 
   it("settles once after close when below threshold", async () => {
-    const marketId = marketIdFromLabel("tests/a4_settle_cancel_at_close.ts");
     const marketIdLe = Buffer.alloc(8);
     marketIdLe.writeBigUInt64LE(BigInt(marketId.toString()));
 

@@ -1,13 +1,13 @@
 import * as anchor from "@coral-xyz/anchor";
 import { PublicKey, SystemProgram, Keypair, LAMPORTS_PER_SOL } from "@solana/web3.js";
 import {
-import { marketIdFromLabel } from "./utils/runSalt";
   createMint,
   getOrCreateAssociatedTokenAccount,
   mintTo,
   TOKEN_PROGRAM_ID,
   getAccount,
 } from "@solana/spl-token";
+import { marketIdFromLabel } from "./utils/runSalt";
 import assert from "assert";
 import { rpcRetry, sendAndConfirmRetry } from "./utils/rpc";
 
@@ -64,7 +64,6 @@ describe("A5 cancel refund + recovery (vFinal)", () => {
   it("A5.1 refund blocked before commit_close_ts", async () => {
     assert.strictEqual(typeof (program as any).methods[refundMethodName], "function", "MISSING_REFUND_METHOD:refundCommitmentVfinal");
 
-    const marketId = marketIdFromLabel("tests/a5_cancel_refund_vfinal.ts");
     const { market: marketPda, commitPool: commitPoolPda, commitVault: commitVaultPda } =
       findPdas(program.programId, marketId);
     const usdcMint = await createMint(connection, payer, admin, null, 6);
