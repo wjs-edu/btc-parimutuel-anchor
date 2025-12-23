@@ -106,4 +106,4 @@ jobs:
       - name: Devnet gate (vFinal A1-A5)
         run: |
           set -euo pipefail
-          yarn test:devnet
+          yarn test:devnet:ci
