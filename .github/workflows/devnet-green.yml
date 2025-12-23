@@ -86,6 +86,9 @@ jobs:
           fi
           printf '%s' "${DEVNET_KEYPAIR_JSON}" > .ci-devnet-keypair.json
           chmod 600 .ci-devnet-keypair.json
+          mkdir -p ~/.config/solana
+          cp .ci-devnet-keypair.json ~/.config/solana/id.json
+          chmod 600 ~/.config/solana/id.json
           solana config set --url https://api.devnet.solana.com --keypair .ci-devnet-keypair.json
           solana address
 
