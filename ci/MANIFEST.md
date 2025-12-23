@@ -9,7 +9,7 @@ Do not change versions except via an explicit "Toolchain bump" PR.
 - Yarn: 1.22.22
 - Rust: 1.77.2
 - Solana CLI: 1.18.26
-- Anchor CLI: 0.32.1 (installed via `cargo install anchor-cli` — no avm)
+- Anchor CLI: 0.32.1 (pinned binary + sha256 in CI; no avm; no source build)
 
 ## Upgrade rule
 - No auto-upgrades.
@@ -20,5 +20,5 @@ Do not change versions except via an explicit "Toolchain bump" PR.
   3) One green Devnet gate run
 
 ## Last known good
-- GitHub run: <ADD LINK AFTER FIRST GREEN>
-- Devnet tx proof: <ADD TX SIG AFTER FIRST GREEN>
+- GitHub run: https://github.com/wjs-edu/btc-parimutuel-anchor/actions/runs/20447711881
+- Devnet tx proof: N/A (not logged)
