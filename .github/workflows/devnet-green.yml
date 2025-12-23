@@ -61,13 +61,18 @@ jobs:
           tar -xjf "${TARBALL}"
           export PATH="${PWD}/solana-release/bin:${PATH}"
           echo "${PWD}/solana-release/bin" >> $GITHUB_PATH
-          ./solana-release/bin/solana --version
-
-      - name: Install Anchor CLI 0.32.1 (cargo)
+          ./solana-release/bin/solana --version      - name: Install Anchor CLI 0.32.1 (pinned binary)
         run: |
           set -euo pipefail
-          cargo --version
-          cargo install --locked --git https://github.com/coral-xyz/anchor --tag v0.32.1 anchor-cli
+          ANCHOR_VER="0.32.1"
+          BIN="anchor-${ANCHOR_VER}-x86_64-unknown-linux-gnu"
+          URL="https://github.com/solana-foundation/anchor/releases/download/v${ANCHOR_VER}/${BIN}"
+          curl -fL --retry 5 --retry-delay 2 -o anchor "${URL}"
+          echo "5f25b850ce80278507a98947833fcd48423391f6d145046ffb0c5fd130dec436  anchor" | sha256sum -c -
+          chmod +x anchor
+          mkdir -p "${HOME}/.local/bin"
+          mv anchor "${HOME}/.local/bin/anchor"
+          echo "${HOME}/.local/bin" >> $GITHUB_PATH
           anchor --version
 
       - name: Write devnet keypair
