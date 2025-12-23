@@ -5,3 +5,24 @@ target
 node_modules
 test-ledger
 .yarn
+
+# local debug artifacts
+*.bak
+scripts/
+Cargo.lock
+
+# local backups
+.bak/
+*.bak_*
+
+# local backups (never commit)
+programs/btc_parimutuel/src/*.bak_*
+
+# allow repo scripts (needed for CI test manifest + audit)
+!scripts/
+!scripts/**
+
+# local-only scripts artifacts
+scripts/__pycache__/
+scripts/gen_test_min.py
+scripts/green-devnet.sh

@@ -1,0 +1,4 @@
+[
+  "tests/classic_smoke.ts",
+  "tests/fairness_order.ts"
+]

@@ -1,0 +1,119 @@
+name: Devnet Green (vFinal A1-A5)
+
+on:
+  pull_request:
+    branches: [ main ]
+  push:
+    branches: [ main ]
+
+jobs:
+  devnet-green:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: btc_parimutuel
+    env:
+      ANCHOR_PROVIDER_URL: https://api.devnet.solana.com
+      ANCHOR_WALLET: ${{ github.workspace }}/btc_parimutuel/.ci-devnet-keypair.json
+      DEVNET_KEYPAIR_JSON: ${{ secrets.DEVNET_KEYPAIR_JSON }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install Yarn 1.22.22
+        run: |
+          npm i -g yarn@1.22.22
+          yarn --version
+
+      - name: Install system deps
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential pkg-config libudev-dev clang cmake
+
+      - name: Setup Rust 1.77.2
+        uses: dtolnay/rust-toolchain@v1
+        with:
+          toolchain: "1.77.2"
+          components: rustfmt, clippy
+
+      - name: Cache cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            btc_parimutuel/target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('btc_parimutuel/Cargo.lock') }}
+
+      - name: Install Solana CLI 1.18.26 (tarball)
+        run: |
+          set -euo pipefail
+          SOLANA_VER="1.18.26"
+          TARBALL="solana-release-x86_64-unknown-linux-gnu.tar.bz2"
+          URL="https://github.com/solana-labs/solana/releases/download/v${SOLANA_VER}/${TARBALL}"
+          curl -L --retry 5 --retry-delay 2 -o "${TARBALL}" "${URL}"
+          tar -xjf "${TARBALL}"
+          export PATH="${PWD}/solana-release/bin:${PATH}"
+          echo "${PWD}/solana-release/bin" >> $GITHUB_PATH
+          ./solana-release/bin/solana --version
+
+      - name: Install Anchor CLI 0.32.1 (pinned binary)
+        run: |
+          set -euo pipefail
+          ANCHOR_VER="0.32.1"
+          BIN="anchor-${ANCHOR_VER}-x86_64-unknown-linux-gnu"
+          URL="https://github.com/solana-foundation/anchor/releases/download/v${ANCHOR_VER}/${BIN}"
+          curl -fL --retry 5 --retry-delay 2 -o anchor "${URL}"
+          echo "5f25b850ce80278507a98947833fcd48423391f6d145046ffb0c5fd130dec436  anchor" | sha256sum -c -
+          chmod +x anchor
+          mkdir -p "${HOME}/.local/bin"
+          mv anchor "${HOME}/.local/bin/anchor"
+          echo "${HOME}/.local/bin" >> $GITHUB_PATH
+          anchor --version
+
+      - name: Write devnet keypair
+        run: |
+          set -euo pipefail
+          if [ -z "${DEVNET_KEYPAIR_JSON}" ]; then
+            echo "DEVNET_KEYPAIR_JSON secret is missing"
+            exit 1
+          fi
+          printf '%s' "${DEVNET_KEYPAIR_JSON}" > .ci-devnet-keypair.json
+          chmod 600 .ci-devnet-keypair.json
+          mkdir -p ~/.config/solana
+          cp .ci-devnet-keypair.json ~/.config/solana/id.json
+          chmod 600 ~/.config/solana/id.json
+          solana config set --url https://api.devnet.solana.com --keypair .ci-devnet-keypair.json
+          solana address
+
+      - name: Yarn install
+        run: |
+          set -euo pipefail
+          yarn install --frozen-lockfile
+
+      - name: Fetch IDL from devnet (no-build CI)
+        run: |
+          set -euo pipefail
+          mkdir -p target/idl
+          anchor idl fetch --provider.cluster devnet QvRjL6RbUCg1pCxskrxBpiuoJ94iEghWddwYipjAQpz > target/idl/btc_parimutuel.json
+          ls -la target/idl
+
+      - name: Audit (fast)
+        run: |
+          set -euo pipefail
+          if [ -x scripts/test_audit.sh ]; then
+            ./scripts/test_audit.sh
+          else
+            echo "scripts/test_audit.sh not found; skipping"
+          fi
+
+      - name: Devnet gate (vFinal A1-A5)
+        run: |
+          set -euo pipefail
+          yarn test:devnet:ci

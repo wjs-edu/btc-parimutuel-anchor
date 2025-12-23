@@ -1,0 +1,12 @@
+
+# never commit CI devnet keypair
+btc_parimutuel/.ci-devnet-keypair.json
+ci-devnet-keypair.json
+
+# never commit CI devnet keypair
+btc_parimutuel/.ci-devnet-keypair.json
+ci-devnet-keypair.json
+
+# allow Cargo.lock to be committed (CI reproducibility)
+!btc_parimutuel/Cargo.lock
+.github/workflows/devnet-green.yml.bak.*
