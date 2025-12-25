@@ -10,3 +10,4 @@ ci-devnet-keypair.json
 # allow Cargo.lock to be committed (CI reproducibility)
 !btc_parimutuel/Cargo.lock
 .github/workflows/devnet-green.yml.bak.*
+node_modules/
