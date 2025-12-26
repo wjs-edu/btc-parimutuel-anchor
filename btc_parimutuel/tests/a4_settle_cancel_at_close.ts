@@ -1,6 +1,11 @@
 import * as anchor from "@coral-xyz/anchor";
 import { PublicKey, SystemProgram } from "@solana/web3.js";
-import { createMint, getOrCreateAssociatedTokenAccount, mintTo, TOKEN_PROGRAM_ID } from "@solana/spl-token";
+import {
+  createMint,
+  getOrCreateAssociatedTokenAccount,
+  mintTo,
+  TOKEN_PROGRAM_ID,
+} from "@solana/spl-token";
 import { marketIdFromLabel } from "./utils/runSalt";
 import assert from "assert";
 import { rpcRetry } from "./utils/rpc";
@@ -19,26 +24,51 @@ describe("A4 settle at commit close (CANCEL)", () => {
 
     marketIdLe.writeBigUInt64LE(BigInt(marketId.toString()));
 
-    const [marketPda] = PublicKey.findProgramAddressSync([Buffer.from("market_v1"), marketIdLe], program.programId);
-    const [commitPoolPda] = PublicKey.findProgramAddressSync([Buffer.from("commit_pool_v1"), marketPda.toBuffer()], program.programId);
-    const [commitVaultPda] = PublicKey.findProgramAddressSync([Buffer.from("commit_vault_v1"), marketPda.toBuffer()], program.programId);
+    const [marketPda] = PublicKey.findProgramAddressSync(
+      [Buffer.from("market_v1"), marketIdLe],
+      program.programId
+    );
+    const [commitPoolPda] = PublicKey.findProgramAddressSync(
+      [Buffer.from("commit_pool_v1"), marketPda.toBuffer()],
+      program.programId
+    );
+    const [commitVaultPda] = PublicKey.findProgramAddressSync(
+      [Buffer.from("commit_vault_v1"), marketPda.toBuffer()],
+      program.programId
+    );
+
+    console.log("A4 ARTIFACT outcome:", "CANCEL");
+    console.log("A4 ARTIFACT market_id:", marketId.toString());
+    console.log("A4 ARTIFACT market_pda:", marketPda.toBase58());
 
     const usdcMint = await createMint(connection, payer, admin, null, 6);
-    const ata = await getOrCreateAssociatedTokenAccount(connection, payer, usdcMint, admin);
+    const ata = await getOrCreateAssociatedTokenAccount(
+      connection,
+      payer,
+      usdcMint,
+      admin
+    );
     await mintTo(connection, payer, usdcMint, ata.address, admin, 2_000_000);
 
     const now = Math.floor(Date.now() / 1000);
     const commitClose = now + 10;
 
-    await rpcRetry(() =>
-      program.methods.publishMarketVfinal(marketId, {
-        variant: 0, creator: admin,
-        commitOpenTs: new anchor.BN(now - 2),
-        commitCloseTs: new anchor.BN(commitClose),
-        resolutionTs: new anchor.BN(commitClose + 60),
-        overrideMinToOpenUsd: new anchor.BN(20),
-        overrideBetCutoffTs: null,
-      }).accounts({ admin, market: marketPda, systemProgram: SystemProgram.programId })
+    const closeSig = await rpcRetry(() =>
+      program.methods
+        .publishMarketVfinal(marketId, {
+          variant: 0,
+          creator: admin,
+          commitOpenTs: new anchor.BN(now - 2),
+          commitCloseTs: new anchor.BN(commitClose),
+          resolutionTs: new anchor.BN(commitClose + 60),
+          overrideMinToOpenUsd: new anchor.BN(20),
+          overrideBetCutoffTs: null,
+        })
+        .accounts({
+          admin,
+          market: marketPda,
+          systemProgram: SystemProgram.programId,
+        })
         .rpc({ commitment: "confirmed" })
     );
 
@@ -48,33 +78,49 @@ describe("A4 settle at commit close (CANCEL)", () => {
     );
 
     await rpcRetry(() =>
-      program.methods.commitVfinal(marketId, 1, new anchor.BN(1_000_000))
+      program.methods
+        .commitVfinal(marketId, 1, new anchor.BN(1_000_000))
         .accounts({
-          user: admin, market: marketPda, commitPool: commitPoolPda, commitVault: commitVaultPda,
-          commitment: commitmentPda, userUsdcAta: ata.address, usdcMint,
-          systemProgram: SystemProgram.programId, tokenProgram: TOKEN_PROGRAM_ID, rent: anchor.web3.SYSVAR_RENT_PUBKEY,
+          user: admin,
+          market: marketPda,
+          commitPool: commitPoolPda,
+          commitVault: commitVaultPda,
+          commitment: commitmentPda,
+          userUsdcAta: ata.address,
+          usdcMint,
+          systemProgram: SystemProgram.programId,
+          tokenProgram: TOKEN_PROGRAM_ID,
+          rent: anchor.web3.SYSVAR_RENT_PUBKEY,
         })
         .rpc({ commitment: "confirmed" })
     );
     const slot = await connection.getSlot("confirmed");
-    const chainNow = (await connection.getBlockTime(slot)) ?? Math.floor(Date.now() / 1000);
+    const chainNow =
+      (await connection.getBlockTime(slot)) ?? Math.floor(Date.now() / 1000);
     const waitSec = Math.max(0, commitClose - chainNow + 2);
     await new Promise((r) => setTimeout(r, waitSec * 1000));
 
     await rpcRetry(() =>
-      (program as any).methods.settleCommitCloseVfinal(marketId)
+      (program as any).methods
+        .settleCommitCloseVfinal(marketId)
         .accounts({ market: marketPda, commitPool: commitPoolPda })
         .rpc({ commitment: "confirmed" })
     );
+    console.log("A4 ARTIFACT close_sig:", closeSig);
+    console.log("A4 ARTIFACT close_url:", `https://explorer.solana.com/tx/${closeSig}?cluster=devnet`);
+
 
     let secondThrew = false;
     try {
       await rpcRetry(() =>
-        (program as any).methods.settleCommitCloseVfinal(marketId)
+        (program as any).methods
+          .settleCommitCloseVfinal(marketId)
           .accounts({ market: marketPda, commitPool: commitPoolPda })
           .rpc({ commitment: "confirmed" })
       );
-    } catch { secondThrew = true; }
+    } catch {
+      secondThrew = true;
+    }
     assert(secondThrew, "expected second settle to throw");
   });
 });
