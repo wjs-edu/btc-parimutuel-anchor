@@ -20,9 +20,32 @@ for (const id of ids) {
   const status = st.status;
 
   if (status === "RESOLVED") {
-    if (!st.resolve_sig || !st.claim_sig) { console.error(`FAIL ${id}: RESOLVED missing resolve_sig/claim_sig`); ok = false; }
+    if (!st.resolve_sig || !st.claim_sig) {
+      console.error(`FAIL : RESOLVED missing resolve_sig or claim_sig in status json`);
+      ok = false;
+    }
+
     const resolvedDir = path.join("artifacts", "resolved", id);
-    if (!fs.existsSync(resolvedDir)) { console.error(`FAIL ${id}: missing ${resolvedDir}`); ok = false; }
+    if (!fs.existsSync(resolvedDir)) {
+      console.error(`FAIL : missing resolved bundle dir `);
+      ok = false;
+    } else {
+      const required = [
+        "market.account.json",
+        "resolve.sig.txt",
+        "resolve.confirm.json",
+        "claim.sig.txt",
+        "claim.confirm.json",
+      ];
+
+      for (const f of required) {
+        const p = path.join(resolvedDir, f);
+        if (!fs.existsSync(p)) {
+          console.error(`FAIL : missing resolved proof file `);
+          ok = false;
+        }
+      }
+    }
   } else if (status === "CANCELED" || status === "OPENED") {
     console.error(`WARN ${id}: status=${status} has no persisted bundle dirs in artifacts/ at maxdepth=3 (resolved-only on disk today).`);
   } else {
