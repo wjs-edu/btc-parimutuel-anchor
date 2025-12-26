@@ -83,8 +83,8 @@ describe("A5 cancel refund + recovery (vFinal)", () => {
 
     const { market: marketPda, commitPool: commitPoolPda, commitVault: commitVaultPda } =
       findPdas(program.programId, marketId);
-    await ensureLamports(connection, payer.publicKey);
 
+    await ensureLamports(connection, payer.publicKey, 5000000000);
  usdcMint = await createMint(connection, payer, admin, null, 6);
       const commitVaultAta = getAssociatedTokenAddressSync(usdcMint, marketPda, true);
     const adminAta = await getOrCreateAssociatedTokenAccount(connection, payer, usdcMint, admin);
@@ -139,7 +139,6 @@ it("A5.2 refund blocked when A4 outcome == OPEN", async () => {
     const [commitPoolPda] = PublicKey.findProgramAddressSync([Buffer.from("commit_pool_v1"), marketPda.toBuffer()], program.programId);
     const [commitVaultPda] = PublicKey.findProgramAddressSync([Buffer.from("commit_vault_v1"), marketPda.toBuffer()], program.programId);
 
-    await ensureLamports(connection, payer.publicKey);
 
 
  usdcMint = await createMint(connection, payer, admin, null, 6);
@@ -240,7 +239,6 @@ it("A5.3 refund succeeds once; second call cannot change balances (idempotent)",
   const { market: marketPda, commitPool: commitPoolPda, commitVault: commitVaultPda } =
     findPdas(program.programId, marketId);
 
-  await ensureLamports(connection, payer.publicKey);
 
 
  usdcMint = await createMint(connection, payer, admin, null, 6);
@@ -328,7 +326,6 @@ it("A5.4 order independence (A->B == B->A) + vault conservation", async () => {
       const { market: marketPda, commitPool: commitPoolPda, commitVault: commitVaultPda } =
       findPdas(program.programId, marketId);
 
-    await ensureLamports(connection, payer.publicKey);
 
 
  usdcMint = await createMint(connection, payer, admin, null, 6);
