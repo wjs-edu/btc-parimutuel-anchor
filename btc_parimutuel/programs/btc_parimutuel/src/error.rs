@@ -24,6 +24,23 @@ pub enum ErrorCode {
   #[msg("Commit-close already settled.")]
   AlreadySettled,
 
+  // Phase C: vFinal Resolve/Claim
+  #[msg("Invalid winning side.")]
+  InvalidWinningSide,
+  #[msg("Market not open.")]
+  NotOpen,
+  #[msg("Market not resolved.")]
+  NotResolved,
+  #[msg("Already resolved.")]
+  AlreadyResolved,
+  #[msg("Already claimed.")]
+  AlreadyClaimed,
+  #[msg("Too early to resolve.")]
+  TooEarlyToResolve,
+  #[msg("No winners on winning side.")]
+  NoWinners,
+
+  // Phase C: vFinal Resolve/Claim
 }
 
 // ==========================

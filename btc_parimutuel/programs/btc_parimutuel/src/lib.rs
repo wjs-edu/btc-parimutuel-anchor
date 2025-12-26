@@ -83,6 +83,22 @@ pub enum ErrorCode {
     #[msg("Commitment already refunded.")]
     AlreadyRefunded,
 
+
+    // Phase C: vFinal Resolve/Claim
+    #[msg("Invalid winning side.")]
+    InvalidWinningSide,
+    #[msg("Market not open.")]
+    NotOpen,
+    #[msg("Market not resolved.")]
+    NotResolved,
+    #[msg("Already resolved.")]
+    AlreadyResolved,
+    #[msg("Already claimed.")]
+    AlreadyClaimed,
+    #[msg("Too early to resolve.")]
+    TooEarlyToResolve,
+    #[msg("No winners on winning side.")]
+    NoWinners,
 }
 
 // ============================================================================
@@ -175,10 +191,7 @@ pub struct InitializeMarket<'info> {
 
     pub token_program: Program<'info, Token>,
 
-    pub system_program: Program<'info, System>,
-
-    pub rent: Sysvar<'info, Rent>,
-}
+    pub system_program: Program<'info, System>,}
 
 #[derive(Accounts)]
 #[instruction(market_id: u64, direction: u8, amount: u64)]
@@ -214,10 +227,7 @@ pub struct PlaceBet<'info> {
 
     pub token_program: Program<'info, Token>,
 
-    pub system_program: Program<'info, System>,
-
-    pub rent: Sysvar<'info, Rent>,
-}
+    pub system_program: Program<'info, System>,}
 
 #[derive(Accounts)]
 #[instruction(market_id: u64, outcome: u8)]
@@ -340,7 +350,46 @@ pub mod btc_parimutuel {
     }
 
     
-    pub fn settle_commit_close_vfinal(
+    
+    // =========================================================================
+    // Phase C: vFinal Resolve/Claim
+    // =========================================================================
+    pub fn resolve_market_vfinal(ctx: Context<ResolveMarketVFinal>, _market_id: u64, winning_side: u8) -> Result<()> {
+        require!(winning_side==1||winning_side==2, ErrorCode::InvalidWinningSide);
+        let m=&mut ctx.accounts.market; let clock=Clock::get()?;
+        require!(m.a4_is_settled(), ErrorCode::TooEarly); require!(m.a4_outcome()==1, ErrorCode::NotOpen);
+        require!(clock.unix_timestamp>=m.resolution_ts, ErrorCode::TooEarlyToResolve);
+        require!(!m.c1_is_resolved(), ErrorCode::AlreadyResolved);
+        m.c1_mark_resolved(winning_side, clock.unix_timestamp); Ok(())
+    }
+    pub fn claim_payout_vfinal(ctx: Context<ClaimPayoutVFinal>, _market_id: u64) -> Result<()> {
+        let m=&ctx.accounts.market; require!(m.a4_is_settled(), ErrorCode::TooEarly); require!(m.a4_outcome()==1, ErrorCode::NotOpen);
+        require!(m.c1_is_resolved(), ErrorCode::NotResolved);
+        let c=&mut ctx.accounts.commitment; require!(c.amount>0, ErrorCode::NoCommitment); require!(!c.c2_is_claimed(), ErrorCode::AlreadyClaimed);
+        let total=ctx.accounts.commit_pool.total_committed as u128;
+        let win=m.c1_winning_side(); let winners=if win==1 { ctx.accounts.commit_pool.total_up as u128 } else { ctx.accounts.commit_pool.total_down as u128 };
+        require!(winners>0, ErrorCode::NoWinners);
+        let amt=c.amount as u128; let payout=((amt*total)/winners).min(u64::MAX as u128) as u64;
+        c.amount=0; c.c2_mark_claimed();
+        let mk=m.key(); let seeds:&[&[u8]]=&[b"commit_pool_v1", mk.as_ref(), &[ctx.accounts.commit_pool.bump]]; let signer=&[seeds];
+        let cpi=token::Transfer{from:ctx.accounts.commit_vault.to_account_info(),to:ctx.accounts.user_usdc_ata.to_account_info(),authority:ctx.accounts.commit_pool.to_account_info()};
+        token::transfer(CpiContext::new_with_signer(ctx.accounts.token_program.to_account_info(), cpi, signer), payout)?;
+        let r=&mut ctx.accounts.receipt; r.market=m.key(); r.user=ctx.accounts.user.key(); r.winning_side=win; r.committed_amount=amt as u64; r.payout_amount=payout; r.claimed_at=Clock::get()?.unix_timestamp; r.bump=ctx.bumps.receipt;
+        Ok(())
+    }
+
+    pub fn init_receipt_v1(ctx: Context<InitReceiptV1>, _market_id: u64) -> Result<()> {
+        let r=&mut ctx.accounts.receipt;
+        r.market = ctx.accounts.market.key();
+        r.user = ctx.accounts.user.key();
+        r.winning_side = 0;
+        r.committed_amount = 0;
+        r.payout_amount = 0;
+        r.claimed_at = 0;
+        r.bump = ctx.bumps.receipt;
+        Ok(())
+    }
+pub fn settle_commit_close_vfinal(
         ctx: Context<SettleCommitCloseVFinal>,
         _market_id: u64,
     ) -> Result<()> {
@@ -791,9 +840,7 @@ pub struct CommitVFinal<'info> {
 
   pub usdc_mint: Account<'info, Mint>,
   pub system_program: Program<'info, System>,
-  pub token_program: Program<'info, Token>,
-  pub rent: Sysvar<'info, Rent>,
-}
+  pub token_program: Program<'info, Token>,}
 
 // ============================================================================
 // A5: VFinal Cancel Refund (Accounts)
@@ -841,5 +888,55 @@ pub struct RefundCommitmentVFinal<'info> {
   )]
   pub user_usdc_ata: Account<'info, TokenAccount>,
 
+  pub token_program: Program<'info, Token>,
+}
+
+#[derive(Accounts)]
+#[instruction(market_id: u64, winning_side: u8)]
+pub struct InitReceiptV1<'info>{
+  #[account(mut)] pub user: Signer<'info>,
+  #[account(seeds=[b"market_v1".as_ref(), market_id.to_le_bytes().as_ref()], bump=market.bump)]
+  pub market: Account<'info, VFinalMarket>,
+  #[account(init, payer=user, space=8+std::mem::size_of::<ReceiptV1>(), seeds=[b"receipt_v1".as_ref(), market.key().as_ref(), user.key().as_ref()], bump)]
+  pub receipt: Account<'info, ReceiptV1>,
+  pub system_program: Program<'info, System>,
+}
+
+// ============================================================================
+// Phase C: vFinal Resolve/Claim (Accounts) - corrected
+// ============================================================================
+#[derive(Accounts)]
+#[instruction(market_id: u64, winning_side: u8)]
+pub struct ResolveMarketVFinal<'info> {
+  pub admin: Signer<'info>,
+  #[account(mut, seeds=[b"market_v1".as_ref(), market_id.to_le_bytes().as_ref()], bump=market.bump)]
+  pub market: Account<'info, VFinalMarket>,
+  #[account(mut, seeds=[b"commit_pool_v1".as_ref(), market.key().as_ref()], bump=commit_pool.bump)]
+  pub commit_pool: Account<'info, VFinalCommitPool>,
+}
+
+#[derive(Accounts)]
+#[instruction(market_id: u64)]
+pub struct ClaimPayoutVFinal<'info> {
+  #[account(mut)]
+  pub user: Signer<'info>,
+  #[account(mut, seeds=[b"market_v1".as_ref(), market_id.to_le_bytes().as_ref()], bump=market.bump)]
+  pub market: Account<'info, VFinalMarket>,
+  #[account(mut, seeds=[b"commit_pool_v1".as_ref(), market.key().as_ref()], bump=commit_pool.bump)]
+  pub commit_pool: Account<'info, VFinalCommitPool>,
+  #[account(
+    mut,
+    seeds=[b"commit_vault_v1".as_ref(), market.key().as_ref()],
+    bump=commit_pool.vault_bump,
+    constraint=commit_vault.key()==commit_pool.commit_vault,
+    constraint=commit_vault.mint==commit_pool.usdc_mint
+  )]
+  pub commit_vault: Account<'info, TokenAccount>,
+  #[account(mut, seeds=[b"commitment_v1".as_ref(), market.key().as_ref(), user.key().as_ref()], bump=commitment.bump)]
+  pub commitment: Account<'info, VFinalCommitment>,
+  #[account(mut, constraint=user_usdc_ata.owner==user.key(), constraint=user_usdc_ata.mint==commit_pool.usdc_mint)]
+  pub user_usdc_ata: Account<'info, TokenAccount>,
+  #[account(mut, seeds=[b"receipt_v1".as_ref(), market.key().as_ref(), user.key().as_ref()], bump)]
+  pub receipt: Account<'info, ReceiptV1>,
   pub token_program: Program<'info, Token>,
 }

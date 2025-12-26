@@ -79,3 +79,16 @@ impl VFinalCommitment {
     self._reserved[8..16].copy_from_slice(&b);
   }
 }
+
+// Phase C flags in VFinalMarket._reserved: [2]=resolved, [3]=winning_side, [16..24]=resolved_at i64
+impl VFinalMarket {
+  pub fn c1_is_resolved(&self)->bool { self._reserved[2]==1 }
+  pub fn c1_winning_side(&self)->u8 { self._reserved[3] }
+  pub fn c1_mark_resolved(&mut self, s:u8, t:i64){ self._reserved[2]=1; self._reserved[3]=s; self._reserved[16..24].copy_from_slice(&t.to_le_bytes()); }
+}
+impl VFinalCommitment {
+  pub fn c2_is_claimed(&self)->bool { self._reserved[1]==1 }
+  pub fn c2_mark_claimed(&mut self){ self._reserved[1]=1; }
+}
+#[account]
+pub struct ReceiptV1 { pub market:Pubkey,pub user:Pubkey,pub winning_side:u8,pub committed_amount:u64,pub payout_amount:u64,pub claimed_at:i64,pub bump:u8,pub _reserved:[u8;32], }
