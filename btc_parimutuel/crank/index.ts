@@ -49,7 +49,7 @@ function loadIdl(){
 }
 async function main(){
   const args=process.argv.slice(2); const cmd=args[0];
-  if(cmd!=="run" && cmd!=="commit" && cmd!=="settle"){ usage(); process.exit(1); }
+  if(cmd!=="run" && cmd!=="commit" && cmd!=="settle" && cmd!=="refund"){ usage(); process.exit(1); }
   const provider=anchor.AnchorProvider.env(); anchor.setProvider(provider);
   const idl=loadIdl(); const program=new Program(idl as any, provider);
   const programId = program.programId as unknown as PublicKey;
@@ -65,6 +65,15 @@ async function main(){
       const s=Math.max(0, close-now+2); if(s>0) await new Promise(r=>setTimeout(r,s*1000)); }
     const sig=await rpcRetry(() => (program as any).methods.settleCommitCloseVfinal(new BN(mid)).accounts({ market: pdas.marketPda, commitPool: pdas.commitPoolPda }).rpc({commitment:"confirmed"}), "settle");
     console.log("Settle sig:", sig); writeEvidenceSettle(mid, String(sig)); return; }
+  if(cmd==="refund"){
+    const mid=String(args[args.indexOf("--market-id")+1]||""); if(!mid){ usage(); process.exit(1); }
+    const { userAta } = await loadOrCreateUsdc(provider, mid);
+    const pdas=deriveCommitPdas(programId, mid, provider.wallet.publicKey);
+    const sig=await rpcRetry(() => (program as any).methods.refundCommitmentVfinal(new BN(mid)).accounts({
+      user: provider.wallet.publicKey, market: pdas.marketPda, commitPool: pdas.commitPoolPda, commitVault: pdas.commitVaultPda,
+      commitment: pdas.commitmentPda, userUsdcAta: userAta, tokenProgram: TOKEN_PROGRAM_ID,
+    }).rpc({commitment:"confirmed"}), "refund");
+    console.log("Refund sig:", sig); writeEvidenceRefund(mid, String(sig)); return; }
   const mi=args.indexOf("--market"); const marketPath=(mi!==-1 && args[mi+1])?args[mi+1]:""; if(!marketPath){ usage(); process.exit(1); }
   const raw=fs.readFileSync(marketPath,"utf8"); const paramsHash=sha256Hex(canonicalizeParams(raw));
   console.log("Crank Runner v0"); console.log("Market file:", marketPath); console.log("Params Hash:", paramsHash);
@@ -111,4 +120,8 @@ function writeEvidenceCommit(marketIdStr: string, sig: string){
 function writeEvidenceSettle(marketIdStr: string, sig: string){
   const d=path.join("evidence", marketIdStr); fs.mkdirSync(d,{recursive:true});
   fs.writeFileSync(path.join(d,"settle.sig.txt"), sig+"\n");
+}
+function writeEvidenceRefund(marketIdStr: string, sig: string){
+  const d=path.join("evidence", marketIdStr); fs.mkdirSync(d,{recursive:true});
+  fs.writeFileSync(path.join(d,"refund.sig.txt"), sig+"\n");
 }
