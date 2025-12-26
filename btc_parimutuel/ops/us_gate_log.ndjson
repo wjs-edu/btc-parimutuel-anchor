@@ -1,0 +1,2 @@
+# append-only NDJSON (one JSON object per line):
+# {"ts":"ISO8601","route":"/...","blocked_surface":"...","basis":"geo|ip|app","correlation_id":"...","notes":"optional"}
