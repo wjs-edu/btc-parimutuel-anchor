@@ -7,7 +7,6 @@ import {
   TOKEN_PROGRAM_ID,
   getAccount,
 } from "@solana/spl-token";
-import { ensureLamports } from "./utils/ensureLamports";
 import { getAssociatedTokenAddressSync } from "@solana/spl-token";
 import { marketIdFromLabel } from "./utils/runSalt";
 import assert from "assert";
@@ -83,9 +82,7 @@ describe("A5 cancel refund + recovery (vFinal)", () => {
 
     const { market: marketPda, commitPool: commitPoolPda, commitVault: commitVaultPda } =
       findPdas(program.programId, marketId);
-
-    await ensureLamports(connection, payer.publicKey, 5000000000);
- usdcMint = await createMint(connection, payer, admin, null, 6);
+    const usdcMint = await createMint(connection, payer, admin, null, 6);
       const commitVaultAta = getAssociatedTokenAddressSync(usdcMint, marketPda, true);
     const adminAta = await getOrCreateAssociatedTokenAccount(connection, payer, usdcMint, admin);
     await mintTo(connection, payer, usdcMint, adminAta.address, admin, 2_000_000);
@@ -139,9 +136,7 @@ it("A5.2 refund blocked when A4 outcome == OPEN", async () => {
     const [commitPoolPda] = PublicKey.findProgramAddressSync([Buffer.from("commit_pool_v1"), marketPda.toBuffer()], program.programId);
     const [commitVaultPda] = PublicKey.findProgramAddressSync([Buffer.from("commit_vault_v1"), marketPda.toBuffer()], program.programId);
 
-
-
- usdcMint = await createMint(connection, payer, admin, null, 6);
+    const usdcMint = await createMint(connection, payer, admin, null, 6);
       const commitVaultAta = getAssociatedTokenAddressSync(usdcMint, marketPda, true);
     const now = Math.floor(Date.now() / 1000);
     const commitClose = now + 120;
@@ -239,9 +234,7 @@ it("A5.3 refund succeeds once; second call cannot change balances (idempotent)",
   const { market: marketPda, commitPool: commitPoolPda, commitVault: commitVaultPda } =
     findPdas(program.programId, marketId);
 
-
-
- usdcMint = await createMint(connection, payer, admin, null, 6);
+  const usdcMint = await createMint(connection, payer, admin, null, 6);
       const commitVaultAta = getAssociatedTokenAddressSync(usdcMint, marketPda, true);
   const adminAta = await getOrCreateAssociatedTokenAccount(connection, payer, usdcMint, admin);
   await mintTo(connection, payer, usdcMint, adminAta.address, admin, 5_000_000);
@@ -326,9 +319,7 @@ it("A5.4 order independence (A->B == B->A) + vault conservation", async () => {
       const { market: marketPda, commitPool: commitPoolPda, commitVault: commitVaultPda } =
       findPdas(program.programId, marketId);
 
-
-
- usdcMint = await createMint(connection, payer, admin, null, 6);
+    const usdcMint = await createMint(connection, payer, admin, null, 6);
       const commitVaultAta = getAssociatedTokenAddressSync(usdcMint, marketPda, true);
     const now = Math.floor(Date.now() / 1000);
     const commitClose = now + 20;
