@@ -15,6 +15,8 @@ import crypto from "crypto";
 import * as anchor from "@coral-xyz/anchor";
 import { Program } from "@coral-xyz/anchor";
 import { BN } from "bn.js";
+import { PublicKey, SystemProgram } from "@solana/web3.js";
+import { createMint, getOrCreateAssociatedTokenAccount, mintTo, TOKEN_PROGRAM_ID } from "@solana/spl-token";
 const PROGRAM_ID = new anchor.web3.PublicKey("QvRjL6RbUCg1pCxskrxBpiuoJ94iEghWddwYipjAQpz");
 function sha256Hex(s:string){ return crypto.createHash("sha256").update(s,"utf8").digest("hex"); }
 function sortKeys(x:any):any{
@@ -48,38 +50,55 @@ function loadIdl(){
 async function main(){
   const args=process.argv.slice(2);
   const cmd=args[0];
-  const mi=args.indexOf("--market");
-  if(cmd!=="run"||mi===-1||!args[mi+1]){ usage(); process.exit(1); }
-  const marketPath=args[mi+1];
-  const raw=fs.readFileSync(marketPath,"utf8");
-  const paramsJson=canonicalizeParams(raw);
-  const paramsHash=sha256Hex(paramsJson);
-  console.log("Crank Runner v0");
-  console.log("Market file:", marketPath);
-  console.log("Params Hash:", paramsHash);
-  const provider=anchor.AnchorProvider.env();
-  anchor.setProvider(provider);
-  const idl=loadIdl();
-  const program=new Program(idl as any, provider);
-  console.log("Program ID:", program.programId.toBase58());
-  const m:any=JSON.parse(raw);
-  const marketIdStr=(m.market_id ?? Math.floor(Date.now()/1000)).toString();
-  const now=Math.floor(Date.now()/1000);
-  const commitOpenTs=new BN(m.commit_open_ts ?? now);
-  const v=(m.variant ?? 0);
-  const winSec=(v===0 ? 6*3600 : 24*3600);
-  const commitCloseTs=new BN(m.commit_close_ts ?? (now+winSec));
-  const resolutionTs=new BN(m.resolution_ts ?? (now+winSec+3600));
-  const publishArgs:any={
-    variant: m.variant ?? 0,
-    creator: provider.wallet.publicKey,
-    commitOpenTs, commitCloseTs, resolutionTs,
-    overrideMinToOpenUsd: m.override_min_to_open_usd ?? null,
-    overrideBetCutoffTs: m.override_bet_cutoff_ts ?? null,
-  };
+  if(cmd!=="run" && cmd!=="commit"){ usage(); process.exit(1); }
+  const provider=anchor.AnchorProvider.env(); anchor.setProvider(provider);
+  const idl=loadIdl(); const program=new Program(idl as any, provider);
+  const programId = program.programId as unknown as PublicKey;
+  if(cmd==="commit"){
+    const mid=args[args.indexOf("--market-id")+1]; const side=parseInt((args[args.indexOf("--side")+1]||"1"),10);
+    const amt=new BN(args[args.indexOf("--amount")+1]||"1000000");
+    const { usdcMint, userAta } = await loadOrCreateUsdc(provider, mid);
+    const pdas=deriveCommitPdas(programId, mid, provider.wallet.publicKey);
+    const sig=await rpcRetry(() => program.methods.commitVfinal(new BN(mid), side, amt).accounts({ user:provider.wallet.publicKey, market:pdas.marketPda, commitPool:pdas.commitPoolPda, commitVault:pdas.commitVaultPda, commitment:pdas.commitmentPda, userUsdcAta:userAta, usdcMint, systemProgram:SystemProgram.programId, tokenProgram:TOKEN_PROGRAM_ID, rent:anchor.web3.SYSVAR_RENT_PUBKEY }).rpc({commitment:"confirmed"}), "commit");
+    console.log("Commit sig:", sig); writeEvidenceCommit(mid, sig); return;
+  }
+  const mi=args.indexOf("--market"); const marketPath=(mi!==-1 && args[mi+1])?args[mi+1]:""; if(!marketPath){ usage(); process.exit(1); }
+  const raw=fs.readFileSync(marketPath,"utf8"); const paramsHash=sha256Hex(canonicalizeParams(raw));
+  console.log("Crank Runner v0"); console.log("Market file:", marketPath); console.log("Params Hash:", paramsHash);
+  console.log("Program ID:", program.programId.toBase58()); const m:any=JSON.parse(raw);
+  const marketIdStr=(m.market_id ?? Math.floor(Date.now()/1000)).toString(); const now=Math.floor(Date.now()/1000);
+  const commitOpenTs=new BN(m.commit_open_ts ?? now); const v=(m.variant ?? 0); const winSec=(v===0 ? 6*3600 : 24*3600);
+  const commitCloseTs=new BN(m.commit_close_ts ?? (now+winSec)); const resolutionTs=new BN(m.resolution_ts ?? (now+winSec+3600));
+  const publishArgs:any={ variant:m.variant ?? 0, creator:provider.wallet.publicKey, commitOpenTs, commitCloseTs, resolutionTs, overrideMinToOpenUsd:m.override_min_to_open_usd ?? null, overrideBetCutoffTs:m.override_bet_cutoff_ts ?? null };
   console.log("Publishing market ID:", marketIdStr);
   const sig=await rpcRetry(() => program.methods.publishMarketVfinal(new BN(marketIdStr), publishArgs).rpc({commitment:"confirmed"}), "publish");
-  console.log("Publish sig:", sig);
-  writeEvidencePublished(marketIdStr, paramsHash, raw, sig);
+  console.log("Publish sig:", sig); writeEvidencePublished(marketIdStr, paramsHash, raw, sig);
 }
 main().catch(e=>{ console.error(e); process.exit(1); });
+function u64le(n: string){
+  const b=Buffer.alloc(8); b.writeBigUInt64LE(BigInt(n)); return b;
+}
+function deriveCommitPdas(programId: PublicKey, marketIdStr: string, user: PublicKey){
+  const [marketPda]=PublicKey.findProgramAddressSync([Buffer.from("market_v1"), u64le(marketIdStr)], programId);
+  const [commitPoolPda]=PublicKey.findProgramAddressSync([Buffer.from("commit_pool_v1"), marketPda.toBuffer()], programId);
+  const [commitVaultPda]=PublicKey.findProgramAddressSync([Buffer.from("commit_vault_v1"), marketPda.toBuffer()], programId);
+  const [commitmentPda]=PublicKey.findProgramAddressSync([Buffer.from("commitment_v1"), marketPda.toBuffer(), user.toBuffer()], programId);
+  return { marketPda, commitPoolPda, commitVaultPda, commitmentPda };
+}
+async function loadOrCreateUsdc(provider: anchor.AnchorProvider, marketIdStr: string){
+  const d=path.join("evidence", marketIdStr); fs.mkdirSync(d,{recursive:true});
+  const mintPath=path.join(d,"usdc_mint.txt"), ataPath=path.join(d,"user_ata.txt");
+  const admin=provider.wallet.publicKey, payer=(provider.wallet as any).payer, conn=provider.connection;
+  if(fs.existsSync(mintPath) && fs.existsSync(ataPath)){
+    return { usdcMint:new PublicKey(fs.readFileSync(mintPath,"utf8").trim()), userAta:new PublicKey(fs.readFileSync(ataPath,"utf8").trim()) };
+  }
+  const usdcMint=await createMint(conn,payer,admin,null,6);
+  const ata=await getOrCreateAssociatedTokenAccount(conn,payer,usdcMint,admin);
+  fs.writeFileSync(mintPath, usdcMint.toBase58()+"\n"); fs.writeFileSync(ataPath, ata.address.toBase58()+"\n");
+  await mintTo(conn,payer,usdcMint,ata.address,admin,3_000_000_000); // 3000 USDC (6d)
+  return { usdcMint, userAta: ata.address };
+}
+function writeEvidenceCommit(marketIdStr: string, sig: string){
+  const d=path.join("evidence", marketIdStr); fs.mkdirSync(d,{recursive:true});
+  fs.writeFileSync(path.join(d,"commit.sig.txt"), sig+"\n");
+}
