@@ -1,0 +1,14 @@
+{
+  "label": "BTC > 50000 at close",
+  "description": "BTC price exceeds 50000 USD at commit close time",
+  "oracle": {
+    "type": "price",
+    "source": "example-oracle-ref",
+    "symbol": "BTC-USD"
+  },
+  "threshold": 50000,
+  "denomination": "USD",
+  "max_total_commit": "2500000000",
+  "non_us_only": true,
+  "variant": 0
+}
