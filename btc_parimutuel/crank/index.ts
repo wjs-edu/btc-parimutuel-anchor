@@ -49,36 +49,43 @@ function loadIdl(){
 }
 async function main(){
   const args=process.argv.slice(2); const cmd=args[0];
+  let mid = "";
   if(cmd!=="run" && cmd!=="commit" && cmd!=="settle" && cmd!=="refund"){ usage(); process.exit(1); }
   const provider=anchor.AnchorProvider.env(); anchor.setProvider(provider);
   const idl=loadIdl(); const program=new Program(idl as any, provider);
   const programId = program.programId as unknown as PublicKey;
-  if(cmd==="commit"){ const mid=String(args[args.indexOf("--market-id")+1]||""); if(!mid){ usage(); process.exit(1); }
+  if(cmd==="commit"){ mid=String(args[args.indexOf("--market-id")+1]||""); if(!mid){ usage(); process.exit(1); }
     const side=parseInt((args[args.indexOf("--side")+1]||"1"),10); const amt=new BN(args[args.indexOf("--amount")+1]||"1000000");
     const { usdcMint, userAta } = await loadOrCreateUsdc(provider, mid); const pdas=deriveCommitPdas(programId, mid, provider.wallet.publicKey);
     const sig=await rpcRetry(() => program.methods.commitVfinal(new BN(mid), side, amt).accounts({ user:provider.wallet.publicKey, market:pdas.marketPda, commitPool:pdas.commitPoolPda, commitVault:pdas.commitVaultPda, commitment:pdas.commitmentPda, userUsdcAta:userAta, usdcMint, systemProgram:SystemProgram.programId, tokenProgram:TOKEN_PROGRAM_ID, rent:anchor.web3.SYSVAR_RENT_PUBKEY }).rpc({commitment:"confirmed"}), "commit");
     console.log("Commit sig:", sig); writeEvidenceCommit(mid, sig); return; }
-  if(cmd==="settle"){ const mid=String(args[args.indexOf("--market-id")+1]||""); if(!mid){ usage(); process.exit(1); }
+    await writeSnapshots(program as any, programId, mid, provider.wallet.publicKey);
+  if(cmd==="settle"){ mid=String(args[args.indexOf("--market-id")+1]||""); if(!mid){ usage(); process.exit(1); }
     const wait=args.includes("--wait"); const pdas=deriveCommitPdas(programId, mid, provider.wallet.publicKey);
     if(wait){ const mkt:any=await (program as any).account.vFinalMarket.fetch(pdas.marketPda); const close=parseInt(mkt.commitCloseTs.toString(),10);
       const slot=await provider.connection.getSlot("confirmed"); const now=(await provider.connection.getBlockTime(slot)) ?? Math.floor(Date.now()/1000);
       const s=Math.max(0, close-now+2); if(s>0) await new Promise(r=>setTimeout(r,s*1000)); }
     const sig=await rpcRetry(() => (program as any).methods.settleCommitCloseVfinal(new BN(mid)).accounts({ market: pdas.marketPda, commitPool: pdas.commitPoolPda }).rpc({commitment:"confirmed"}), "settle");
     console.log("Settle sig:", sig); writeEvidenceSettle(mid, String(sig)); return; }
-  if(cmd==="refund"){
-    const mid=String(args[args.indexOf("--market-id")+1]||""); if(!mid){ usage(); process.exit(1); }
-    const { userAta } = await loadOrCreateUsdc(provider, mid);
-    const pdas=deriveCommitPdas(programId, mid, provider.wallet.publicKey);
-    const sig=await rpcRetry(() => (program as any).methods.refundCommitmentVfinal(new BN(mid)).accounts({
-      user: provider.wallet.publicKey, market: pdas.marketPda, commitPool: pdas.commitPoolPda, commitVault: pdas.commitVaultPda,
-      commitment: pdas.commitmentPda, userUsdcAta: userAta, tokenProgram: TOKEN_PROGRAM_ID,
-    }).rpc({commitment:"confirmed"}), "refund");
-    console.log("Refund sig:", sig); writeEvidenceRefund(mid, String(sig)); return; }
+    await writeSnapshots(program as any, programId, mid, provider.wallet.publicKey);
+  if(cmd==="refund"){ mid=String(args[args.indexOf("--market-id")+1]||""); if(!mid){ usage(); process.exit(1); }
+    const { userAta }=await loadOrCreateUsdc(provider, mid); const pdas=deriveCommitPdas(programId, mid, provider.wallet.publicKey);
+    let sig:any=null;
+    try{
+      sig=await (program as any).methods.refundCommitmentVfinal(new BN(mid)).accounts({ user:provider.wallet.publicKey, market:pdas.marketPda, commitPool:pdas.commitPoolPda, commitVault:pdas.commitVaultPda, commitment:pdas.commitmentPda, userUsdcAta:userAta, tokenProgram:TOKEN_PROGRAM_ID }).rpc({commitment:"confirmed"});
+      console.log("Refund sig:", sig); writeEvidenceRefund(mid, String(sig));
+    }catch(e:any){
+      const msg=String(e?.message||e); if(!msg.includes("NoCommitment")) throw e;
+      console.log("Refund: already refunded (NoCommitment) — continuing to snapshots");
+    }
+    await writeSnapshots(program as any, programId, mid, provider.wallet.publicKey); return; }
+    await writeSnapshots(program as any, programId, mid, provider.wallet.publicKey);
   const mi=args.indexOf("--market"); const marketPath=(mi!==-1 && args[mi+1])?args[mi+1]:""; if(!marketPath){ usage(); process.exit(1); }
   const raw=fs.readFileSync(marketPath,"utf8"); const paramsHash=sha256Hex(canonicalizeParams(raw));
   console.log("Crank Runner v0"); console.log("Market file:", marketPath); console.log("Params Hash:", paramsHash);
   console.log("Program ID:", program.programId.toBase58()); const m:any=JSON.parse(raw);
   const marketIdStr=(m.market_id ?? Math.floor(Date.now()/1000)).toString(); const now=Math.floor(Date.now()/1000);
+  mid = marketIdStr;
   const closeInSec=(args.includes("--close-in-sec")?parseInt(args[args.indexOf("--close-in-sec")+1],10):null);
   const minOpenUsd=(args.includes("--min-open-usd")?parseInt(args[args.indexOf("--min-open-usd")+1],10):null);
   const commitOpenTs=new BN(m.commit_open_ts ?? now); const v=(m.variant ?? 0); const winSec=(v===0 ? 6*3600 : 24*3600);
@@ -88,6 +95,7 @@ async function main(){
   console.log("Publishing market ID:", marketIdStr);
   const sig=await rpcRetry(() => program.methods.publishMarketVfinal(new BN(marketIdStr), publishArgs).rpc({commitment:"confirmed"}), "publish");
   console.log("Publish sig:", sig); writeEvidencePublished(marketIdStr, paramsHash, raw, sig);
+  await writeSnapshots(program as any, programId, marketIdStr, provider.wallet.publicKey);
 }
 main().catch(e=>{ console.error(e); process.exit(1); });
 function u64le(n: string){
@@ -124,4 +132,15 @@ function writeEvidenceSettle(marketIdStr: string, sig: string){
 function writeEvidenceRefund(marketIdStr: string, sig: string){
   const d=path.join("evidence", marketIdStr); fs.mkdirSync(d,{recursive:true});
   fs.writeFileSync(path.join(d,"refund.sig.txt"), sig+"\n");
+}
+async function writeSnapshots(program:any, programId: PublicKey, mid: string, user: PublicKey){
+  const d=path.join("evidence", mid); fs.mkdirSync(d,{recursive:true});
+  const pdas=deriveCommitPdas(programId, mid, user);
+  const safe=async (f:any)=>{ try{ return await f(); }catch{ return null; } };
+  const m=await safe(()=>program.account.vFinalMarket.fetch(pdas.marketPda));
+  const p2=await safe(()=>program.account.vFinalCommitPool.fetch(pdas.commitPoolPda));
+  const c=await safe(()=>program.account.vFinalCommitment.fetch(pdas.commitmentPda));
+  fs.writeFileSync(path.join(d,"market.account.json"), JSON.stringify(m,null,2) + "\n");
+  fs.writeFileSync(path.join(d,"commit_pool.account.json"), JSON.stringify(p2,null,2) + "\n");
+  fs.writeFileSync(path.join(d,"commitment.account.json"), JSON.stringify(c,null,2) + "\n");
 }
