@@ -48,28 +48,34 @@ function loadIdl(){
   return JSON.parse(fs.readFileSync(p,"utf8"));
 }
 async function main(){
-  const args=process.argv.slice(2);
-  const cmd=args[0];
-  if(cmd!=="run" && cmd!=="commit"){ usage(); process.exit(1); }
+  const args=process.argv.slice(2); const cmd=args[0];
+  if(cmd!=="run" && cmd!=="commit" && cmd!=="settle"){ usage(); process.exit(1); }
   const provider=anchor.AnchorProvider.env(); anchor.setProvider(provider);
   const idl=loadIdl(); const program=new Program(idl as any, provider);
   const programId = program.programId as unknown as PublicKey;
-  if(cmd==="commit"){
-    const mid=args[args.indexOf("--market-id")+1]; const side=parseInt((args[args.indexOf("--side")+1]||"1"),10);
-    const amt=new BN(args[args.indexOf("--amount")+1]||"1000000");
-    const { usdcMint, userAta } = await loadOrCreateUsdc(provider, mid);
-    const pdas=deriveCommitPdas(programId, mid, provider.wallet.publicKey);
+  if(cmd==="commit"){ const mid=String(args[args.indexOf("--market-id")+1]||""); if(!mid){ usage(); process.exit(1); }
+    const side=parseInt((args[args.indexOf("--side")+1]||"1"),10); const amt=new BN(args[args.indexOf("--amount")+1]||"1000000");
+    const { usdcMint, userAta } = await loadOrCreateUsdc(provider, mid); const pdas=deriveCommitPdas(programId, mid, provider.wallet.publicKey);
     const sig=await rpcRetry(() => program.methods.commitVfinal(new BN(mid), side, amt).accounts({ user:provider.wallet.publicKey, market:pdas.marketPda, commitPool:pdas.commitPoolPda, commitVault:pdas.commitVaultPda, commitment:pdas.commitmentPda, userUsdcAta:userAta, usdcMint, systemProgram:SystemProgram.programId, tokenProgram:TOKEN_PROGRAM_ID, rent:anchor.web3.SYSVAR_RENT_PUBKEY }).rpc({commitment:"confirmed"}), "commit");
-    console.log("Commit sig:", sig); writeEvidenceCommit(mid, sig); return;
-  }
+    console.log("Commit sig:", sig); writeEvidenceCommit(mid, sig); return; }
+  if(cmd==="settle"){ const mid=String(args[args.indexOf("--market-id")+1]||""); if(!mid){ usage(); process.exit(1); }
+    const wait=args.includes("--wait"); const pdas=deriveCommitPdas(programId, mid, provider.wallet.publicKey);
+    if(wait){ const mkt:any=await (program as any).account.vFinalMarket.fetch(pdas.marketPda); const close=parseInt(mkt.commitCloseTs.toString(),10);
+      const slot=await provider.connection.getSlot("confirmed"); const now=(await provider.connection.getBlockTime(slot)) ?? Math.floor(Date.now()/1000);
+      const s=Math.max(0, close-now+2); if(s>0) await new Promise(r=>setTimeout(r,s*1000)); }
+    const sig=await rpcRetry(() => (program as any).methods.settleCommitCloseVfinal(new BN(mid)).accounts({ market: pdas.marketPda, commitPool: pdas.commitPoolPda }).rpc({commitment:"confirmed"}), "settle");
+    console.log("Settle sig:", sig); writeEvidenceSettle(mid, String(sig)); return; }
   const mi=args.indexOf("--market"); const marketPath=(mi!==-1 && args[mi+1])?args[mi+1]:""; if(!marketPath){ usage(); process.exit(1); }
   const raw=fs.readFileSync(marketPath,"utf8"); const paramsHash=sha256Hex(canonicalizeParams(raw));
   console.log("Crank Runner v0"); console.log("Market file:", marketPath); console.log("Params Hash:", paramsHash);
   console.log("Program ID:", program.programId.toBase58()); const m:any=JSON.parse(raw);
   const marketIdStr=(m.market_id ?? Math.floor(Date.now()/1000)).toString(); const now=Math.floor(Date.now()/1000);
+  const closeInSec=(args.includes("--close-in-sec")?parseInt(args[args.indexOf("--close-in-sec")+1],10):null);
+  const minOpenUsd=(args.includes("--min-open-usd")?parseInt(args[args.indexOf("--min-open-usd")+1],10):null);
   const commitOpenTs=new BN(m.commit_open_ts ?? now); const v=(m.variant ?? 0); const winSec=(v===0 ? 6*3600 : 24*3600);
-  const commitCloseTs=new BN(m.commit_close_ts ?? (now+winSec)); const resolutionTs=new BN(m.resolution_ts ?? (now+winSec+3600));
-  const publishArgs:any={ variant:m.variant ?? 0, creator:provider.wallet.publicKey, commitOpenTs, commitCloseTs, resolutionTs, overrideMinToOpenUsd:m.override_min_to_open_usd ?? null, overrideBetCutoffTs:m.override_bet_cutoff_ts ?? null };
+  const commitCloseTs=new BN(m.commit_close_ts ?? (closeInSec? (now+closeInSec): (now+winSec)));
+  const resolutionTs=new BN(m.resolution_ts ?? (closeInSec? (now+closeInSec+60): (now+winSec+3600)));
+  const publishArgs:any={ variant:m.variant ?? 0, creator:provider.wallet.publicKey, commitOpenTs, commitCloseTs, resolutionTs, overrideMinToOpenUsd:(minOpenUsd!==null? new BN(minOpenUsd):(m.override_min_to_open_usd ?? null)), overrideBetCutoffTs:m.override_bet_cutoff_ts ?? null };
   console.log("Publishing market ID:", marketIdStr);
   const sig=await rpcRetry(() => program.methods.publishMarketVfinal(new BN(marketIdStr), publishArgs).rpc({commitment:"confirmed"}), "publish");
   console.log("Publish sig:", sig); writeEvidencePublished(marketIdStr, paramsHash, raw, sig);
@@ -101,4 +107,8 @@ async function loadOrCreateUsdc(provider: anchor.AnchorProvider, marketIdStr: st
 function writeEvidenceCommit(marketIdStr: string, sig: string){
   const d=path.join("evidence", marketIdStr); fs.mkdirSync(d,{recursive:true});
   fs.writeFileSync(path.join(d,"commit.sig.txt"), sig+"\n");
+}
+function writeEvidenceSettle(marketIdStr: string, sig: string){
+  const d=path.join("evidence", marketIdStr); fs.mkdirSync(d,{recursive:true});
+  fs.writeFileSync(path.join(d,"settle.sig.txt"), sig+"\n");
 }
