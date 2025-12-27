@@ -17,7 +17,7 @@ import { Program } from "@coral-xyz/anchor";
 import { BN } from "bn.js";
 import { PublicKey, SystemProgram } from "@solana/web3.js";
 import { createMint, getOrCreateAssociatedTokenAccount, mintTo, TOKEN_PROGRAM_ID } from "@solana/spl-token";
-const PROGRAM_ID = new anchor.web3.PublicKey("QvRjL6RbUCg1pCxskrxBpiuoJ94iEghWddwYipjAQpz");
+const PROGRAM_ID = new anchor.web3.PublicKey(process.env.CRANK_PROGRAM_ID || "QvRjL6RbUCg1pCxskrxBpiuoJ94iEghWddwYipjAQpz");
 function sha256Hex(s:string){ return crypto.createHash("sha256").update(s,"utf8").digest("hex"); }
 function sortKeys(x:any):any{
   if(x===null||x===undefined) return null;
@@ -50,7 +50,7 @@ function loadIdl(){
 async function main(){
   const args=process.argv.slice(2); const cmd=args[0];
   let mid = "";
-  if(cmd!=="run" && cmd!=="commit" && cmd!=="settle" && cmd!=="refund"){ usage(); process.exit(1); }
+  if(cmd!=="run" && cmd!=="commit" && cmd!=="settle" && cmd!=="refund" && cmd!=="init_receipt" && cmd!=="resolve" && cmd!=="claim"){ usage(); process.exit(1); }
   const provider=anchor.AnchorProvider.env(); anchor.setProvider(provider);
   const idl=loadIdl(); const program=new Program(idl as any, provider);
   const programId = program.programId as unknown as PublicKey;
@@ -80,6 +80,22 @@ async function main(){
     }
     await writeSnapshots(program as any, programId, mid, provider.wallet.publicKey); return; }
     await writeSnapshots(program as any, programId, mid, provider.wallet.publicKey);
+  if(cmd==="init_receipt"){ mid=String(args[args.indexOf("--market-id")+1]||""); if(!mid){ usage(); process.exit(1); }
+    const pdas=deriveCommitPdas(programId, mid, provider.wallet.publicKey);
+    const receipt=PublicKey.findProgramAddressSync([Buffer.from("receipt_v1"), pdas.marketPda.toBuffer(), provider.wallet.publicKey.toBuffer()], programId)[0];
+    const sig=await rpcRetry(()=> (program as any).methods.initReceiptV1(new BN(mid)).accounts({ user:provider.wallet.publicKey, market:pdas.marketPda, receipt, systemProgram:SystemProgram.programId }).rpc({commitment:"confirmed"}),"init_receipt");
+    console.log("InitReceipt sig:",sig); writeEvidenceInitReceipt(mid,String(sig)); await writeSnapshots(program as any, programId, mid, provider.wallet.publicKey); return; }
+  if(cmd==="resolve"){ mid=String(args[args.indexOf("--market-id")+1]||""); if(!mid){ usage(); process.exit(1); }
+    const side=parseInt((args[args.indexOf("--winning-side")+1]||"1"),10);
+    const pdas=deriveCommitPdas(programId, mid, provider.wallet.publicKey);
+    const sig=await rpcRetry(()=> (program as any).methods.resolveMarketVfinal(new BN(mid), side).accounts({ admin:provider.wallet.publicKey, market:pdas.marketPda, commitPool:pdas.commitPoolPda }).rpc({commitment:"confirmed"}),"resolve");
+    console.log("Resolve sig:",sig); writeEvidenceResolve(mid,String(sig)); await writeSnapshots(program as any, programId, mid, provider.wallet.publicKey); return; }
+  if(cmd==="claim"){ mid=String(args[args.indexOf("--market-id")+1]||""); if(!mid){ usage(); process.exit(1); }
+    const pdas=deriveCommitPdas(programId, mid, provider.wallet.publicKey);
+    const receipt=PublicKey.findProgramAddressSync([Buffer.from("receipt_v1"), pdas.marketPda.toBuffer(), provider.wallet.publicKey.toBuffer()], programId)[0];
+    const { userAta }=await loadOrCreateUsdc(provider, mid);
+    const sig=await rpcRetry(()=> (program as any).methods.claimPayoutVfinal(new BN(mid)).accounts({ user:provider.wallet.publicKey, market:pdas.marketPda, commitPool:pdas.commitPoolPda, commitVault:pdas.commitVaultPda, commitment:pdas.commitmentPda, userUsdcAta:userAta, receipt, tokenProgram:TOKEN_PROGRAM_ID }).rpc({commitment:"confirmed"}),"claim");
+    console.log("Claim sig:",sig); writeEvidenceClaim(mid,String(sig)); await writeSnapshots(program as any, programId, mid, provider.wallet.publicKey); return; }
   const mi=args.indexOf("--market"); const marketPath=(mi!==-1 && args[mi+1])?args[mi+1]:""; if(!marketPath){ usage(); process.exit(1); }
   const raw=fs.readFileSync(marketPath,"utf8"); const paramsHash=sha256Hex(canonicalizeParams(raw));
   console.log("Crank Runner v0"); console.log("Market file:", marketPath); console.log("Params Hash:", paramsHash);
@@ -144,3 +160,6 @@ async function writeSnapshots(program:any, programId: PublicKey, mid: string, us
   fs.writeFileSync(path.join(d,"commit_pool.account.json"), JSON.stringify(p2,null,2) + "\n");
   fs.writeFileSync(path.join(d,"commitment.account.json"), JSON.stringify(c,null,2) + "\n");
 }
+function writeEvidenceInitReceipt(mid:string,sig:string){const d=path.join("evidence",mid);fs.mkdirSync(d,{recursive:true});fs.writeFileSync(path.join(d,"init_receipt.sig.txt"),sig+"\n");}
+function writeEvidenceResolve(mid:string,sig:string){const d=path.join("evidence",mid);fs.mkdirSync(d,{recursive:true});fs.writeFileSync(path.join(d,"resolve.sig.txt"),sig+"\n");}
+function writeEvidenceClaim(mid:string,sig:string){const d=path.join("evidence",mid);fs.mkdirSync(d,{recursive:true});fs.writeFileSync(path.join(d,"claim.sig.txt"),sig+"\n");}
