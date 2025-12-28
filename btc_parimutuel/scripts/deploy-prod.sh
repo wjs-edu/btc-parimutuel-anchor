@@ -2,11 +2,13 @@
 set -euo pipefail
 
 : "${PROD_HOST:?set PROD_HOST like root@165.232.137.182}"
-: "${PROD_REPO:?set PROD_REPO like /opt/commitclose/btc_parimutuel}"
-: "${PROD_BRANCH:=proof-ui-v1}"
 
 ssh "$PROD_HOST" bash -s <<'REMOTE'
 set -euo pipefail
+
+# Hard-coded on purpose: avoids relying on remote env vars.
+PROD_REPO="/opt/commitclose/btc_parimutuel"
+PROD_BRANCH="proof-ui-v1"
 
 cd "$PROD_REPO"
 
