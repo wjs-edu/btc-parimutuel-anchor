@@ -162,13 +162,19 @@ async function loadOrCreateUsdc(provider: anchor.AnchorProvider, marketIdStr: st
   const d=path.join("evidence", marketIdStr); fs.mkdirSync(d,{recursive:true});
   const mintPath=path.join(d,"usdc_mint.txt"), ataPath=path.join(d,`user_ata_${provider.wallet.publicKey.toBase58()}.txt`);
   const admin=provider.wallet.publicKey, payer=(provider.wallet as any).payer, conn=provider.connection;
-  if(fs.existsSync(mintPath) && fs.existsSync(ataPath)){
-    return { usdcMint:new PublicKey(fs.readFileSync(mintPath,"utf8").trim()), userAta:new PublicKey(fs.readFileSync(ataPath,"utf8").trim()) };
+  // Mint is per-market and must never drift. If it exists, always reuse it.
+  let usdcMint: PublicKey;
+  if(fs.existsSync(mintPath)){
+    usdcMint = new PublicKey(fs.readFileSync(mintPath,"utf8").trim());
+  }else{
+    usdcMint = await createMint(conn,payer,admin,null,6);
+    fs.writeFileSync(mintPath, usdcMint.toBase58()+"\n");
+    await mintTo(conn,payer,usdcMint,admin,admin,3_000_000_000); // mint to admin; ATAs created below
   }
-  const usdcMint=await createMint(conn,payer,admin,null,6);
-  const ata=await getOrCreateAssociatedTokenAccount(conn,payer,usdcMint,admin);
-  fs.writeFileSync(mintPath, usdcMint.toBase58()+"\n"); fs.writeFileSync(ataPath, ata.address.toBase58()+"\n");
-  await mintTo(conn,payer,usdcMint,ata.address,admin,3_000_000_000); // 3000 USDC (6d)
+
+  // ATA is per-wallet for this market mint.
+  const ata = await getOrCreateAssociatedTokenAccount(conn,payer,usdcMint,admin);
+  fs.writeFileSync(ataPath, ata.address.toBase58()+"\n");
   return { usdcMint, userAta: ata.address };
 }
 function writeEvidenceCommit(marketIdStr: string, sig: string){
