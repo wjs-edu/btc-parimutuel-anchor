@@ -114,7 +114,10 @@ const idlRaw=(await Program.fetchIdl(PROGRAM_ID as any, provider as any)) ?? nor
   const commitOpenTs=new BN(m.commit_open_ts ?? now); const v=(m.variant ?? 0); const winSec=(v===0 ? 6*3600 : 24*3600);
   const commitCloseTs=new BN(m.commit_close_ts ?? (closeInSec? (now+closeInSec): (now+winSec)));
   const resolutionTs=new BN(m.resolution_ts ?? (closeInSec? (now+closeInSec+60): (now+winSec+3600)));
-  const publishArgs:any={ variant:m.variant ?? 0, creator:provider.wallet.publicKey, commitOpenTs, commitCloseTs, resolutionTs, overrideMinToOpenUsd:(minOpenUsd!==null? new BN(minOpenUsd):(m.override_min_to_open_usd ?? null)), overrideBetCutoffTs:m.override_bet_cutoff_ts ?? null };
+  const publishArgs:any={ variant:m.variant ?? 0, creator:provider.wallet.publicKey,
+  commit_open_ts:commitOpenTs, commit_close_ts:commitCloseTs, resolution_ts:resolutionTs,
+  override_min_to_open_usd:(minOpenUsd!==null? new BN(minOpenUsd):(m.override_min_to_open_usd ?? null)),
+  override_bet_cutoff_ts:(m.override_bet_cutoff_ts ?? null) };
   console.log("Publishing market ID:", marketIdStr);
   const marketPda=anchor.web3.PublicKey.findProgramAddressSync([Buffer.from("market_v1"), u64le(marketIdStr)], PROGRAM_ID)[0];
   const data=(coder as any).instruction.encode("publish_market_vfinal",{market_id:new BN(marketIdStr), args: publishArgs});
