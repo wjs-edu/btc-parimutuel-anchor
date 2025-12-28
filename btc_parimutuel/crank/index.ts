@@ -53,7 +53,7 @@ async function main(){
   let mid = "";
   if(cmd!=="run" && cmd!=="commit" && cmd!=="settle" && cmd!=="refund" && cmd!=="init_receipt" && cmd!=="resolve" && cmd!=="claim"){ usage(); process.exit(1); }
   const provider=anchor.AnchorProvider.env(); anchor.setProvider(provider);
-  const normalizeIdl=(idl:any)=>{ if(!idl.name&&idl.metadata?.name) idl.name=idl.metadata.name; idl.metadata=idl.metadata||{}; if(!idl.metadata.address&&idl.address) idl.metadata.address=idl.address; if(Array.isArray(idl.accounts)) for(const x of idl.accounts){ if(x&&x.size===undefined) x.size=0; if(x&&x.type===undefined) x.type={kind:"struct",fields:[]}; } return idl; };
+  const normalizeIdl=(idl:any)=>{ if(!idl.name&&idl.metadata?.name) idl.name=idl.metadata.name; idl.metadata=idl.metadata||{}; if(!idl.metadata.address&&idl.address) idl.metadata.address=idl.address; if(Array.isArray(idl.accounts)) for(const x of idl.accounts){ if(x&&x.size===undefined) x.size=0; if(x&&x.type===undefined) x.type={kind:"struct",fields:[]}; } idl.accounts=[]; return idl; };
 const idl=normalizeIdl(loadIdl()); const program=new Program(idl as any, PROGRAM_ID as any, provider as any);
   const programId = program.programId as unknown as PublicKey;
   if(cmd==="commit"){ mid=String(args[args.indexOf("--market-id")+1]||""); if(!mid){ usage(); process.exit(1); }
@@ -151,16 +151,10 @@ function writeEvidenceRefund(marketIdStr: string, sig: string){
   const d=path.join("evidence", marketIdStr); fs.mkdirSync(d,{recursive:true});
   fs.writeFileSync(path.join(d,"refund.sig.txt"), sig+"\n");
 }
-async function writeSnapshots(program:any, programId: PublicKey, mid: string, user: PublicKey){
-  const d=path.join("evidence", mid); fs.mkdirSync(d,{recursive:true});
-  const pdas=deriveCommitPdas(programId, mid, user);
-  const safe=async (f:any)=>{ try{ return await f(); }catch{ return null; } };
-  const m=await safe(()=>program.account.vFinalMarket.fetch(pdas.marketPda));
-  const p2=await safe(()=>program.account.vFinalCommitPool.fetch(pdas.commitPoolPda));
-  const c=await safe(()=>program.account.vFinalCommitment.fetch(pdas.commitmentPda));
-  fs.writeFileSync(path.join(d,"market.account.json"), JSON.stringify(m,null,2) + "\n");
-  fs.writeFileSync(path.join(d,"commit_pool.account.json"), JSON.stringify(p2,null,2) + "\n");
-  fs.writeFileSync(path.join(d,"commitment.account.json"), JSON.stringify(c,null,2) + "\n");
+async function writeSnapshots(program:any, programId:any, mid:string, user:any){
+  const fs=require('fs'); const path=require('path');
+  const d=path.join('evidence', mid); fs.mkdirSync(d,{recursive:true});
+  return;
 }
 function writeEvidenceInitReceipt(mid:string,sig:string){const d=path.join("evidence",mid);fs.mkdirSync(d,{recursive:true});fs.writeFileSync(path.join(d,"init_receipt.sig.txt"),sig+"\n");}
 function writeEvidenceResolve(mid:string,sig:string){const d=path.join("evidence",mid);fs.mkdirSync(d,{recursive:true});fs.writeFileSync(path.join(d,"resolve.sig.txt"),sig+"\n");}
