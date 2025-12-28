@@ -57,7 +57,8 @@ async function main(){
   console.log('Provider publicKey:', (provider as any).publicKey?.toBase58?.() || String((provider as any).publicKey));
   const normalizeIdl=(idl:any)=>{ if(!idl.name&&idl.metadata?.name) idl.name=idl.metadata.name; idl.metadata=idl.metadata||{}; if(!idl.metadata.address&&idl.address) idl.metadata.address=idl.address; if(Array.isArray(idl.accounts)) for(const x of idl.accounts){ if(x&&x.size===undefined) x.size=0; if(x&&x.type===undefined) x.type={kind:"struct",fields:[]}; } idl.accounts=[]; return idl; };
 const idlRaw=(await Program.fetchIdl(PROGRAM_ID as any, provider as any)) ?? normalizeIdl(loadIdl());
-  const idl=normalizeIdl(idlRaw); idl.accounts=[]; const program=new Program(idl as any, PROGRAM_ID as any, provider as any);
+  const idl=normalizeIdl(idlRaw); idl.accounts=[]; const coder = new (anchor as any).BorshCoder(idl);
+  const program=new Program(idl as any, PROGRAM_ID as any, provider as any);
   (program.provider as any).publicKey = provider.wallet.publicKey;
   const programId = program.programId as unknown as PublicKey;
   if(cmd==="commit"){ mid=String(args[args.indexOf("--market-id")+1]||""); if(!mid){ usage(); process.exit(1); }
@@ -115,7 +116,14 @@ const idlRaw=(await Program.fetchIdl(PROGRAM_ID as any, provider as any)) ?? nor
   const resolutionTs=new BN(m.resolution_ts ?? (closeInSec? (now+closeInSec+60): (now+winSec+3600)));
   const publishArgs:any={ variant:m.variant ?? 0, creator:provider.wallet.publicKey, commitOpenTs, commitCloseTs, resolutionTs, overrideMinToOpenUsd:(minOpenUsd!==null? new BN(minOpenUsd):(m.override_min_to_open_usd ?? null)), overrideBetCutoffTs:m.override_bet_cutoff_ts ?? null };
   console.log("Publishing market ID:", marketIdStr);
-  const sig=await rpcRetry(() => program.methods.publishMarketVfinal(new BN(marketIdStr), publishArgs).rpc({commitment:"confirmed"}), "publish");
+  const marketPda=anchor.web3.PublicKey.findProgramAddressSync([Buffer.from("market_v1"), u64le(marketIdStr)], PROGRAM_ID)[0];
+  const data=(coder as any).instruction.encode("publish_market_vfinal",{marketId:new BN(marketIdStr), publishArgs});
+  const ix=new anchor.web3.TransactionInstruction({ programId: PROGRAM_ID, keys:[
+    {pubkey:provider.wallet.publicKey,isSigner:true,isWritable:true},
+    {pubkey:marketPda,isSigner:false,isWritable:true},
+    {pubkey:anchor.web3.SystemProgram.programId,isSigner:false,isWritable:false},
+  ], data });
+  const sig=await rpcRetry(()=> provider.sendAndConfirm(new anchor.web3.Transaction().add(ix), [], {commitment:"confirmed"}), "publish");
   console.log("Publish sig:", sig); writeEvidencePublished(marketIdStr, paramsHash, raw, sig);
   await writeSnapshots(program as any, programId, marketIdStr, provider.wallet.publicKey);
 }
