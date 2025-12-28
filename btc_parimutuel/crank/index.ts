@@ -64,7 +64,23 @@ const idlRaw=(await Program.fetchIdl(PROGRAM_ID as any, provider as any)) ?? nor
   if(cmd==="commit"){ mid=String(args[args.indexOf("--market-id")+1]||""); if(!mid){ usage(); process.exit(1); }
     const side=parseInt((args[args.indexOf("--side")+1]||"1"),10); const amt=new BN(args[args.indexOf("--amount")+1]||"1000000");
     const { usdcMint, userAta } = await loadOrCreateUsdc(provider, mid); const pdas=deriveCommitPdas(programId, mid, provider.wallet.publicKey);
-    const sig=await rpcRetry(() => program.methods.commitVfinal(new BN(mid), side, amt).accounts({ user:provider.wallet.publicKey, market:pdas.marketPda, commitPool:pdas.commitPoolPda, commitVault:pdas.commitVaultPda, commitment:pdas.commitmentPda, userUsdcAta:userAta, usdcMint, systemProgram:SystemProgram.programId, tokenProgram:TOKEN_PROGRAM_ID, rent:anchor.web3.SYSVAR_RENT_PUBKEY }).rpc({commitment:"confirmed"}), "commit");
+    const marketPda=anchor.web3.PublicKey.findProgramAddressSync([Buffer.from("market_v1"), u64le(mid)], PROGRAM_ID)[0];
+    const commitPoolPda=anchor.web3.PublicKey.findProgramAddressSync([Buffer.from("commit_pool_v1"), marketPda.toBuffer()], PROGRAM_ID)[0];
+    const commitVaultPda=anchor.web3.PublicKey.findProgramAddressSync([Buffer.from("commit_vault_v1"), marketPda.toBuffer()], PROGRAM_ID)[0];
+    const commitmentPda=anchor.web3.PublicKey.findProgramAddressSync([Buffer.from("commitment_v1"), marketPda.toBuffer(), provider.wallet.publicKey.toBuffer()], PROGRAM_ID)[0];
+    const data=(coder as any).instruction.encode("commit_vfinal",{market_id:new BN(mid), side, amount:amt});
+    const ix=new anchor.web3.TransactionInstruction({ programId: PROGRAM_ID, keys:[
+      {pubkey:provider.wallet.publicKey,isSigner:true,isWritable:true},
+      {pubkey:marketPda,isSigner:false,isWritable:false},
+      {pubkey:commitPoolPda,isSigner:false,isWritable:true},
+      {pubkey:commitVaultPda,isSigner:false,isWritable:true},
+      {pubkey:commitmentPda,isSigner:false,isWritable:true},
+      {pubkey:userAta,isSigner:false,isWritable:true},
+      {pubkey:usdcMint,isSigner:false,isWritable:false},
+      {pubkey:anchor.web3.SystemProgram.programId,isSigner:false,isWritable:false},
+      {pubkey:TOKEN_PROGRAM_ID,isSigner:false,isWritable:false},
+    ], data });
+    const sig=await rpcRetry(()=> provider.sendAndConfirm(new anchor.web3.Transaction().add(ix), [], {commitment:"confirmed"}), "commit");
     console.log("Commit sig:", sig); writeEvidenceCommit(mid, sig); return; }
     await writeSnapshots(program as any, programId, mid, provider.wallet.publicKey);
   if(cmd==="settle"){ mid=String(args[args.indexOf("--market-id")+1]||""); if(!mid){ usage(); process.exit(1); }
