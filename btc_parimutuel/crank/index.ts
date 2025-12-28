@@ -160,7 +160,7 @@ function deriveCommitPdas(programId: PublicKey, marketIdStr: string, user: Publi
 }
 async function loadOrCreateUsdc(provider: anchor.AnchorProvider, marketIdStr: string){
   const d=path.join("evidence", marketIdStr); fs.mkdirSync(d,{recursive:true});
-  const mintPath=path.join(d,"usdc_mint.txt"), ataPath=path.join(d,`user_ata_${admin.toBase58()}.txt`);
+  const mintPath=path.join(d,"usdc_mint.txt"), ataPath=path.join(d,`user_ata_${provider.wallet.publicKey.toBase58()}.txt`);
   const admin=provider.wallet.publicKey, payer=(provider.wallet as any).payer, conn=provider.connection;
   if(fs.existsSync(mintPath) && fs.existsSync(ataPath)){
     return { usdcMint:new PublicKey(fs.readFileSync(mintPath,"utf8").trim()), userAta:new PublicKey(fs.readFileSync(ataPath,"utf8").trim()) };
