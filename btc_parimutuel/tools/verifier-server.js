@@ -1,33 +1,35 @@
 const http=require("http"),fs=require("fs"),path=require("path"),u=require("url");
-const root=process.cwd(), esc=s=>String(s).replace(/[&<>"]/g,c=>({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;" }[c]));
+const root=process.cwd();
+const ENV="DEVNET (evidence only)";
+const SUPPORT="support@commitclose.example";
+const esc=s=>String(s??"").replace(/[&<>"]/g,c=>({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;" }[c]));
 const tx=s=>`https://explorer.solana.com/tx/${s}?cluster=devnet`;
-const send=(res,code,ct,body)=>{res.writeHead(code,{"content-type":ct});res.end(body);};
-http.createServer((req,res)=>{
-  const p=u.parse(req.url).pathname||"/";
-  const m=p.match(/^\/(status|verify\/resolved|verify\/canceled)\/(\d+)(?:\.json)?$/);
-  if(!m){ res.writeHead(302,{Location:"/verify/resolved/1766716704"}); return res.end(); }
-  const kind=m[1], id=m[2];
-  if(kind==="status"){
-    const fp=path.join(root,`artifacts/status/${id}.json`);
-    if(!fs.existsSync(fp)) return send(res,404,"text/plain","status not found");
-    return send(res,200,"application/json",fs.readFileSync(fp));
-  }
-  if(kind==="verify/canceled"){
-    const dir=path.join(root,`artifacts/canceled/${id}`), need=["close.sig.txt","market.account.json"];
-    if(!need.every(f=>fs.existsSync(path.join(dir,f)))) return send(res,404,"text/plain","bundle not found");
-    const close=fs.readFileSync(path.join(dir,"close.sig.txt"),"utf8").trim();
-    const market=fs.readFileSync(path.join(dir,"market.account.json"),"utf8");
-    return send(res,200,"text/html; charset=utf-8",`<!doctype html><meta charset="utf-8"><title>Verify Canceled ${esc(id)}</title><h1>Verify: CANCELED Market ${esc(id)}</h1><p><b>Proves:</b> deterministic on-chain application of rules (tx + account artifacts).</p><p><b>Does NOT prove:</b> oracle correctness or off-chain data sources.</p><ul><li>close_market (canceled): <a href="${tx(close)}">${esc(close)}</a></li><li>status: <a href="/status/${esc(id)}.json">/status/${esc(id)}.json</a></li></ul><h2>Market account snapshot</h2><pre style="white-space:pre-wrap">${esc(market)}</pre>`);
-  }
-
-  const dir=path.join(root,`artifacts/resolved/${id}`), need=["resolve.sig.txt","claim.sig.txt","resolve.confirm.json","claim.confirm.json","market.account.json"];
-  if(!need.every(f=>fs.existsSync(path.join(dir,f)))) return send(res,404,"text/plain","bundle not found");
-  const r=fs.readFileSync(path.join(dir,"resolve.sig.txt"),"utf8").trim(), c=fs.readFileSync(path.join(dir,"claim.sig.txt"),"utf8").trim();
-  const market=fs.readFileSync(path.join(dir,"market.account.json"),"utf8");
-  return send(res,200,"text/html; charset=utf-8",`<!doctype html><meta charset="utf-8"><title>Verify Resolved ${esc(id)}</title>
-<h1>Verify: Resolved Market ${esc(id)}</h1>
-<p><b>Proves:</b> deterministic on-chain application of rules (tx + account artifacts).</p>
-<p><b>Does NOT prove:</b> oracle correctness or off-chain data sources.</p>
-<ul><li>resolve_market: <a href="${tx(r)}">${esc(r)}</a></li><li>claim_payout: <a href="${tx(c)}">${esc(c)}</a></li><li>status: <a href="/status/${esc(id)}.json">/status/${esc(id)}.json</a></li></ul>
-<h2>Market account snapshot</h2><pre style="white-space:pre-wrap">${esc(market)}</pre>`);
+const send=(res,code,ct,body,extra={})=>{res.writeHead(code,Object.assign({"content-type":ct},extra));res.end(body);};
+const isTerminal=s=>/^(RESOLVED|CANCELED|SETTLED)$/i.test(String(s||""));
+const TERM_HDR={"Cache-Control":"public, max-age=31536000, immutable"};
+const exists=fp=>fs.existsSync(fp);
+const read=fp=>fs.readFileSync(fp,"utf8");
+const readJson=fp=>JSON.parse(read(fp));
+const loadCopy=()=>{const fp=path.join(root,"COPY_LOCK.md");if(!exists(fp))return[];return read(fp).split("\n").map(l=>l.trim()).filter(l=>l.startsWith("“")&&l.endsWith("”"));};
+const COPY=loadCopy();
+const copyHtml=()=>`<div class="card"><div class="h">Responsibility & non-discretion</div><ul>${COPY.map(s=>`<li>${esc(s)}</li>`).join("")||`<li class="muted">COPY_LOCK.md missing (CI should fail)</li>`}</ul></div>`;
+const provesHtml=()=>`<div class="card"><div class="h">What this proves / does not prove</div><div><b>Proves:</b> deterministic on-chain lifecycle enforcement + labeled tx evidence.</div><div><b>Does not prove:</b> partner internal per-user ledgers/balances or geo/KYC enforcement.</div></div>`;
+const footerHtml=()=>`<div class="footer"><div>Terminal verifier evidence is cacheable and recomputable from on-chain links; operational logs (including deny logs) are retained for at least 30 days.</div><div>Support/Security: <span class="muted">${esc(SUPPORT)}</span></div><div class="muted">Evidence can be recomputed from chain links.</div></div>`;
+const css=`<style>body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial;margin:22px;line-height:1.4}.banner{border:1px solid #ddd;border-radius:14px;padding:10px 12px;margin-bottom:12px}.card{border:1px solid #ddd;border-radius:16px;padding:12px 14px;margin:12px 0}.btn{display:inline-block;padding:9px 12px;border:1px solid #ddd;border-radius:12px;text-decoration:none;color:#111;margin-right:10px}.row{display:flex;gap:14px;flex-wrap:wrap}.k{min-width:220px;color:#444}.h{font-weight:800;margin-bottom:6px}.muted{color:#666}pre{white-space:pre-wrap;overflow-wrap:anywhere}details{border:1px solid #eee;border-radius:12px;padding:10px 12px;margin:10px 0}summary{cursor:pointer;font-weight:800}.footer{margin-top:18px;padding-top:12px;border-top:1px solid #eee;font-size:13px;color:#555}ul{margin:6px 0 0 18px}</style>`;
+const page=(title,body)=>`<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${esc(title)}</title>${css}<div class="banner"><b>Environment:</b> ${esc(ENV)}<div class="muted">Production execution occurs on MAINNET after a paid launch slot is reserved.</div></div>${body}${footerHtml()}`;
+const statusPath=id=>path.join(root,`artifacts/status/${id}.json`);
+const loadStatus=id=>{const fp=statusPath(id);if(!exists(fp))return null;const raw=fs.readFileSync(fp);let obj={};try{obj=JSON.parse(String(raw));}catch(e){}return {fp,raw,obj};};
+const statusTable=obj=>{const keys=Object.keys(obj||{}).sort();const rows=keys.map(k=>`<tr><td style="padding:6px 10px;border-bottom:1px solid #eee"><code>${esc(k)}</code></td><td style="padding:6px 10px;border-bottom:1px solid #eee">${esc(typeof obj[k]==="object"?JSON.stringify(obj[k]):String(obj[k]))}</td></tr>`).join("");return `<table style="border-collapse:collapse;width:100%;border:1px solid #eee;border-radius:12px;overflow:hidden"><thead><tr><th style="text-align:left;padding:8px 10px;border-bottom:1px solid #eee">Field</th><th style="text-align:left;padding:8px 10px;border-bottom:1px solid #eee">Value</th></tr></thead><tbody>${rows}</tbody></table>`;};
+const statusHtml=(id,st)=>{const kind=String(st.obj.status||"").toLowerCase()==="canceled"?"canceled":"resolved";return `<h1>Status: Market ${esc(id)}</h1><div class="card"><a class="btn" href="/status/${esc(id)}.json">Raw JSON</a><a class="btn" href="/proof/${esc(id)}">Proof hub</a><a class="btn" href="/verify/${kind}/${esc(id)}">Verifier</a></div>${statusTable(st.obj)}`;};
+const proofHtml=(id,st)=>{const kind=String(st.obj.status||"").toLowerCase()==="canceled"?"canceled":"resolved";return `<h1>Proof Hub: Market ${esc(id)}</h1><div class="card"><a class="btn" href="/status/${esc(id)}">View Status</a><a class="btn" href="/verify/${kind}/${esc(id)}">View Verifier</a></div>${provesHtml()}${copyHtml()}<div class="card"><div class="h">Two-lane CTA</div><a class="btn" href="#reserve">Reserve Slot</a><a class="btn" href="#observe">Observe / Follow-up</a><div class="muted" style="margin-top:8px">This evidence is sufficient for internal review by Compliance, Engineering, and Finance without a meeting.</div></div>`;};
+const readMarket=dir=>{const fp=path.join(dir,"market.account.json");if(!exists(fp))return {};try{return readJson(fp);}catch(e){return {};}}
+const summaryRows=st=>{const s=[["Environment",ENV],["Program ID",st.obj.program_id??"N/A"],["Market ID",st.obj.market_id??"N/A"],["Terminal state",st.obj.status??"N/A"]];return s.map(([k,v])=>`<div class="row"><div class="k">${esc(k)}</div><div style="font-weight:800">${esc(v)}</div></div>`).join("");};
+const verifyResolvedHtml=(id,st)=>{const dir=path.join(root,`artifacts/resolved/${id}`);const need=["resolve.sig.txt","claim.sig.txt","market.account.json"];if(!need.every(f=>exists(path.join(dir,f))))return null;const r=read(path.join(dir,"resolve.sig.txt")).trim();const c=read(path.join(dir,"claim.sig.txt")).trim();const market=readMarket(dir);return `<h1>Verifier: RESOLVED Market ${esc(id)}</h1><div class="card">${summaryRows(st)}<div style="margin-top:10px"><div class="h">Labeled transaction links</div><ul><li>resolve: <a href="${tx(r)}">${esc(r)}</a></li><li>claim: <a href="${tx(c)}">${esc(c)}</a></li><li>status (canonical): <a href="/status/${esc(id)}.json">/status/${esc(id)}.json</a></li></ul></div></div>${provesHtml()}${copyHtml()}<details><summary>Raw status JSON</summary><pre>${esc(JSON.stringify(st.obj,null,2))}</pre></details><details><summary>Market account snapshot</summary><pre>${esc(JSON.stringify(market,null,2))}</pre></details>`;};
+const verifyCanceledHtml=(id,st)=>{const dir=path.join(root,`artifacts/canceled/${id}`);const need=["close.sig.txt","market.account.json"];if(!need.every(f=>exists(path.join(dir,f))))return null;const close=read(path.join(dir,"close.sig.txt")).trim();const market=readMarket(dir);return `<h1>Verifier: CANCELED Market ${esc(id)}</h1><div class="card">${summaryRows(st)}<div style="margin-top:10px"><div class="h">Labeled transaction links</div><ul><li>close (canceled): <a href="${tx(close)}">${esc(close)}</a></li><li>status (canonical): <a href="/status/${esc(id)}.json">/status/${esc(id)}.json</a></li></ul></div></div>${provesHtml()}${copyHtml()}<details><summary>Raw status JSON</summary><pre>${esc(JSON.stringify(st.obj,null,2))}</pre></details><details><summary>Market account snapshot</summary><pre>${esc(JSON.stringify(market,null,2))}</pre></details>`;};
+http.createServer((req,res)=>{const p=u.parse(req.url).pathname||"/";const m=p.match(/^\/(status|proof|verify\/resolved|verify\/canceled)\/(\d+)(?:\.json)?$/);if(!m){res.writeHead(302,{Location:"/proof/1766716704"});return res.end();}const kind=m[1],id=m[2],wantsJson=p.endsWith(".json");const st=loadStatus(id);if(!st)return send(res,404,"text/plain","status not found");const terminal=isTerminal(st.obj.status);
+if(kind==="status"&&wantsJson)return send(res,200,"application/json",st.raw);
+if(kind==="status"&&!wantsJson)return send(res,200,"text/html; charset=utf-8",page(`Status ${id}`,statusHtml(id,st)),terminal?TERM_HDR:{});
+if(kind==="proof")return send(res,200,"text/html; charset=utf-8",page(`Proof ${id}`,proofHtml(id,st)),terminal?TERM_HDR:{});
+if(kind==="verify/resolved"){const body=verifyResolvedHtml(id,st);if(!body)return send(res,404,"text/plain","bundle not found");return send(res,200,"text/html; charset=utf-8",page(`Verify RESOLVED ${id}`,body),TERM_HDR);}
+if(kind==="verify/canceled"){const body=verifyCanceledHtml(id,st);if(!body)return send(res,404,"text/plain","bundle not found");return send(res,200,"text/html; charset=utf-8",page(`Verify CANCELED ${id}`,body),TERM_HDR);}
 }).listen(process.env.PORT||8787,()=>console.log("verifier http://localhost:8787"));
