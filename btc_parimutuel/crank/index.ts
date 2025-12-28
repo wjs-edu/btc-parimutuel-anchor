@@ -56,7 +56,7 @@ async function main(){
   (provider as any).publicKey = provider.wallet.publicKey;
   console.log('Provider publicKey:', (provider as any).publicKey?.toBase58?.() || String((provider as any).publicKey));
   const normalizeIdl=(idl:any)=>{ if(!idl.name&&idl.metadata?.name) idl.name=idl.metadata.name; idl.metadata=idl.metadata||{}; if(!idl.metadata.address&&idl.address) idl.metadata.address=idl.address; if(Array.isArray(idl.accounts)) for(const x of idl.accounts){ if(x&&x.size===undefined) x.size=0; if(x&&x.type===undefined) x.type={kind:"struct",fields:[]}; } idl.accounts=[]; return idl; };
-const idl=normalizeIdl(loadIdl()); const program=new Program(idl as any, PROGRAM_ID as any, provider as any);
+const idl=(await Program.fetchIdl(PROGRAM_ID as any, provider as any)) ?? normalizeIdl(loadIdl()); const program=new Program(idl as any, PROGRAM_ID as any, provider as any);
   (program.provider as any).publicKey = provider.wallet.publicKey;
   const programId = program.programId as unknown as PublicKey;
   if(cmd==="commit"){ mid=String(args[args.indexOf("--market-id")+1]||""); if(!mid){ usage(); process.exit(1); }
