@@ -52,7 +52,7 @@ async function main(){
   let mid = "";
   if(cmd!=="run" && cmd!=="commit" && cmd!=="settle" && cmd!=="refund" && cmd!=="init_receipt" && cmd!=="resolve" && cmd!=="claim"){ usage(); process.exit(1); }
   const provider=anchor.AnchorProvider.env(); anchor.setProvider(provider);
-  const idl=loadIdl(); const program=new Program(idl as any, provider);
+  const idl=loadIdl(); const program=new Program(idl as any, PROGRAM_ID, provider);
   const programId = program.programId as unknown as PublicKey;
   if(cmd==="commit"){ mid=String(args[args.indexOf("--market-id")+1]||""); if(!mid){ usage(); process.exit(1); }
     const side=parseInt((args[args.indexOf("--side")+1]||"1"),10); const amt=new BN(args[args.indexOf("--amount")+1]||"1000000");
