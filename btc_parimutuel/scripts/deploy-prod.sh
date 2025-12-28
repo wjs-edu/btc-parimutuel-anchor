@@ -25,3 +25,5 @@ echo '--- SMOKE ---'
 curl -fsS http://127.0.0.1:8080/ >/dev/null || true
 echo 'OK'
 "
+
+git clean -fd
