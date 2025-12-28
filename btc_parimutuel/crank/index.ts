@@ -79,6 +79,7 @@ const idlRaw=(await Program.fetchIdl(PROGRAM_ID as any, provider as any)) ?? nor
       {pubkey:usdcMint,isSigner:false,isWritable:false},
       {pubkey:anchor.web3.SystemProgram.programId,isSigner:false,isWritable:false},
       {pubkey:TOKEN_PROGRAM_ID,isSigner:false,isWritable:false},
+      {pubkey:anchor.web3.SYSVAR_RENT_PUBKEY,isSigner:false,isWritable:false},
     ], data });
     const sig=await rpcRetry(()=> provider.sendAndConfirm(new anchor.web3.Transaction().add(ix), [], {commitment:"confirmed"}), "commit");
     console.log("Commit sig:", sig); writeEvidenceCommit(mid, sig); return; }
