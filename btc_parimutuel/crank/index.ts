@@ -169,7 +169,8 @@ async function loadOrCreateUsdc(provider: anchor.AnchorProvider, marketIdStr: st
   }else{
     usdcMint = await createMint(conn,payer,admin,null,6);
     fs.writeFileSync(mintPath, usdcMint.toBase58()+"\n");
-    await mintTo(conn,payer,usdcMint,admin,admin,3_000_000_000); // mint to admin; ATAs created below
+    // fund this wallet ATA for demo commits
+  await mintTo(conn,payer,usdcMint,ata.address,admin,300_000_000);
   }
 
   // ATA is per-wallet for this market mint.
