@@ -22,8 +22,18 @@ docker build -t commitclose-proof:latest .
 docker run -d --name commitclose-proof -p 8080:8080 --restart unless-stopped commitclose-proof:latest
 
 echo '--- SMOKE ---'
-curl -fsS http://127.0.0.1:8080/ >/dev/null || true
-echo 'OK'
-"
+# Retry health check against the canonical contract surface.
+# Fail deploy if we cannot get a clean response.
+for i in 1 2 3 4 5 6 7 8 9 10; do
+  if curl -fsS http://127.0.0.1:8080/status/1766716704.json >/dev/null 2>&1; then
+    echo "OK: app responding"
+    exit 0
+  fi
+  echo "waiting for app... ($i/10)"
+  sleep 1
+ done
 
-git clean -fd
+echo "FAIL: app not responding; dumping container status + logs"
+docker ps --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"
+docker logs --tail 200 commitclose-proof || true
+exit 1
