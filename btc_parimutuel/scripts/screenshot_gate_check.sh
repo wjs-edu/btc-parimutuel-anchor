@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
-V="$(curl -fsS http://localhost:8787/verify/resolved/1766716704)"; P="$(curl -fsS http://localhost:8787/proof/1766716704)"
+BASE_URL="${BASE_URL:-http://localhost:8787}"
+ID="${ID:-1766716704}"
+V="$(curl -fsS "${BASE_URL}/verify/resolved/${ID}")"; P="$(curl -fsS "${BASE_URL}/proof/${ID}")"
 echo "$V$P" | grep -q 'Environment:</b> DEVNET (evidence only)' || { echo "Missing DEVNET banner" >&2; exit 1; }
 echo "$P" | grep -Fq 'This evidence is sufficient for internal review by Compliance, Engineering, and Finance without a meeting.' || { echo "Missing forwardable footer line" >&2; exit 1; }
 for s in "Partner retains custody/KYC/UX" "No discretionary overrides exist." "Does not prove partner internal per-user ledger allocations"; do echo "$V$P" | grep -Fq "$s" || { echo "Missing canonical copy: $s" >&2; exit 1; }; done
