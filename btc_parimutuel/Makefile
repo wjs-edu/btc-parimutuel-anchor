@@ -1,6 +1,6 @@
 .PHONY: sales-ready
 sales-ready: proof_audit_hard
-	 "OK: sales-ready gates passed"
+	 OK: sales-ready gates passed
 
 	./scripts/golden_demo_status_smoke.sh
 	./scripts/forbidden_words_scan.sh
