@@ -3,7 +3,7 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Check, X, Shield, Lock, FileText, CheckCircle2, FileJson, Link as LinkIcon, Copy } from "lucide-react";
 import { Link, useRoute } from "wouter";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { MID_DEFAULT } from "@/lib/constants";
 import { InvalidMid } from "@/components/InvalidMid";
@@ -13,7 +13,29 @@ export default function PartnerProofHub() {
   const [match, params] = useRoute("/proof/:mid");
   const mid = params?.mid || MID_DEFAULT;
   const [isSubmitted, setIsSubmitted] = useState(false);
+  const [requestId, setRequestId] = useState<string | null>(null);
+  const [submittedEmails, setSubmittedEmails] = useState<{ compliance: string; infra: string } | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [formValues, setFormValues] = useState({
+    tier_usd: 25000,
+    company_legal: "",
+    target_start_week: "",
+    non_us_confirmed: false,
+    compliance_email: "",
+    infra_email: "",
+  });
   const { toast } = useToast();
+
+  const isValid = useMemo(() => {
+    const requiredStrings = [
+      formValues.company_legal,
+      formValues.target_start_week,
+      formValues.compliance_email,
+      formValues.infra_email,
+    ];
+    const tierAllowed = [25000, 50000, 75000].includes(formValues.tier_usd);
+    return tierAllowed && formValues.non_us_confirmed === true && requiredStrings.every((s) => s.trim() !== "");
+  }, [formValues]);
 
   if (mid && isNaN(Number(mid))) {
     return <InvalidMid />;
@@ -27,6 +49,44 @@ export default function PartnerProofHub() {
       description: `${label} copied to clipboard.`,
       duration: 2000,
     });
+  };
+
+  const updateValue = (key: keyof typeof formValues, value: string | number | boolean) => {
+    setFormValues((prev) => ({ ...prev, [key]: value }));
+  };
+
+  const submitReserveSlot = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (isSubmitting || !isValid) return;
+
+    setIsSubmitting(true);
+    try {
+      const res = await fetch("/intake/reserve-slot", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ ...formValues, source_mid: mid }),
+      });
+      const data = await res.json().catch(() => null);
+      if (!res.ok || !data?.ok) {
+        toast({
+          title: "Request failed",
+          description: data?.error ? `Server responded: ${data.error}` : "Please try again.",
+          variant: "destructive",
+        });
+        return;
+      }
+      setRequestId(data.request_id || null);
+      setSubmittedEmails({ compliance: formValues.compliance_email, infra: formValues.infra_email });
+      setIsSubmitted(true);
+    } catch (_err) {
+      toast({
+        title: "Network error",
+        description: "Unable to send request. Please retry.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -234,7 +294,7 @@ export default function PartnerProofHub() {
         {/* Reserve Slot Section */}
         <div className="max-w-xl mx-auto space-y-8">
             {!isSubmitted ? (
-                <>
+                <form onSubmit={submitReserveSlot} className="space-y-8">
                     <div className="text-center space-y-2">
                          <h2 className="text-lg font-semibold text-slate-900">Capacity Reservation (Non-Refundable Deposit)</h2>
                     </div>
@@ -243,18 +303,18 @@ export default function PartnerProofHub() {
                         <div className="space-y-3">
                             <label className="text-xs font-bold uppercase tracking-wide text-slate-500">Deposit options</label>
                             <div className="grid grid-cols-3 gap-3">
-                                <label className="flex items-center justify-center border border-slate-200 rounded-sm p-4 cursor-pointer hover:border-slate-300 hover:bg-slate-50 transition-all has-[:checked]:border-slate-900 has-[:checked]:ring-1 has-[:checked]:ring-slate-900 has-[:checked]:bg-slate-50">
-                                    <input type="radio" name="deposit" className="sr-only" defaultChecked />
-                                    <span className="font-mono font-medium text-slate-900">$25k</span>
-                                </label>
-                                <label className="flex items-center justify-center border border-slate-200 rounded-sm p-4 cursor-pointer hover:border-slate-300 hover:bg-slate-50 transition-all has-[:checked]:border-slate-900 has-[:checked]:ring-1 has-[:checked]:ring-slate-900 has-[:checked]:bg-slate-50">
-                                    <input type="radio" name="deposit" className="sr-only" />
-                                    <span className="font-mono font-medium text-slate-900">$50k</span>
-                                </label>
-                                <label className="flex items-center justify-center border border-slate-200 rounded-sm p-4 cursor-pointer hover:border-slate-300 hover:bg-slate-50 transition-all has-[:checked]:border-slate-900 has-[:checked]:ring-1 has-[:checked]:ring-slate-900 has-[:checked]:bg-slate-50">
-                                    <input type="radio" name="deposit" className="sr-only" />
-                                    <span className="font-mono font-medium text-slate-900">$75k</span>
-                                </label>
+                                {[25000,50000,75000].map((tier) => (
+                                  <label key={tier} className="flex items-center justify-center border border-slate-200 rounded-sm p-4 cursor-pointer hover:border-slate-300 hover:bg-slate-50 transition-all has-[:checked]:border-slate-900 has-[:checked]:ring-1 has-[:checked]:ring-slate-900 has-[:checked]:bg-slate-50">
+                                      <input
+                                        type="radio"
+                                        name="deposit"
+                                        className="sr-only"
+                                        checked={formValues.tier_usd === tier}
+                                        onChange={() => updateValue("tier_usd", tier)}
+                                      />
+                                      <span className="font-mono font-medium text-slate-900">${tier/1000}k</span>
+                                  </label>
+                                ))}
                             </div>
                              <p className="text-xs text-slate-600 leading-normal pt-1">
                                 A $25k non-refundable deposit reserves execution capacity. Remaining fees are invoiced at Market #1 publish.
@@ -268,17 +328,33 @@ export default function PartnerProofHub() {
                             <div className="grid grid-cols-2 gap-4">
                                 <div className="space-y-1.5">
                                     <label className="text-[10px] font-bold uppercase tracking-wide text-slate-400">Company (Legal Entity)</label>
-                                    <input type="text" className="w-full h-10 px-3 border border-slate-200 rounded-sm text-sm focus:outline-none focus:border-slate-400 transition-colors" />
+                                    <input
+                                      type="text"
+                                      className="w-full h-10 px-3 border border-slate-200 rounded-sm text-sm focus:outline-none focus:border-slate-400 transition-colors"
+                                      value={formValues.company_legal}
+                                      onChange={(e) => updateValue("company_legal", e.target.value)}
+                                    />
                                 </div>
                                 <div className="space-y-1.5">
                                     <label className="text-[10px] font-bold uppercase tracking-wide text-slate-400">Target Start Week</label>
-                                    <input type="text" className="w-full h-10 px-3 border border-slate-200 rounded-sm text-sm focus:outline-none focus:border-slate-400 transition-colors" placeholder="YYYY-W##" />
+                                    <input
+                                      type="text"
+                                      className="w-full h-10 px-3 border border-slate-200 rounded-sm text-sm focus:outline-none focus:border-slate-400 transition-colors"
+                                      placeholder="YYYY-W##"
+                                      value={formValues.target_start_week}
+                                      onChange={(e) => updateValue("target_start_week", e.target.value)}
+                                    />
                                 </div>
                             </div>
 
                             <div className="space-y-1.5">
                                 <label className="flex items-start gap-3 p-3 border border-slate-100 bg-slate-50 rounded-sm cursor-pointer hover:bg-slate-100 transition-colors">
-                                    <input type="checkbox" className="mt-0.5 rounded-sm border-slate-300 text-slate-900 focus:ring-slate-900" />
+                                    <input
+                                      type="checkbox"
+                                      className="mt-0.5 rounded-sm border-slate-300 text-slate-900 focus:ring-slate-900"
+                                      checked={formValues.non_us_confirmed}
+                                      onChange={(e) => updateValue("non_us_confirmed", e.target.checked)}
+                                    />
                                     <span className="text-xs font-medium text-slate-700">We confirm this cohort is non-US.</span>
                                 </label>
                             </div>
@@ -286,21 +362,32 @@ export default function PartnerProofHub() {
                             <div className="grid grid-cols-2 gap-4">
                                 <div className="space-y-1.5">
                                     <label className="text-[10px] font-bold uppercase tracking-wide text-slate-400">Compliance Email</label>
-                                    <input type="email" className="w-full h-10 px-3 border border-slate-200 rounded-sm text-sm focus:outline-none focus:border-slate-400 transition-colors" />
+                                    <input
+                                      type="email"
+                                      className="w-full h-10 px-3 border border-slate-200 rounded-sm text-sm focus:outline-none focus:border-slate-400 transition-colors"
+                                      value={formValues.compliance_email}
+                                      onChange={(e) => updateValue("compliance_email", e.target.value)}
+                                    />
                                 </div>
                                 <div className="space-y-1.5">
                                     <label className="text-[10px] font-bold uppercase tracking-wide text-slate-400">Infra Email</label>
-                                    <input type="email" className="w-full h-10 px-3 border border-slate-200 rounded-sm text-sm focus:outline-none focus:border-slate-400 transition-colors" />
+                                    <input
+                                      type="email"
+                                      className="w-full h-10 px-3 border border-slate-200 rounded-sm text-sm focus:outline-none focus:border-slate-400 transition-colors"
+                                      value={formValues.infra_email}
+                                      onChange={(e) => updateValue("infra_email", e.target.value)}
+                                    />
                                 </div>
                             </div>
                         </div>
 
                         <div className="pt-2 space-y-4">
                             <Button 
-                                onClick={() => setIsSubmitted(true)}
-                                className="w-full h-12 bg-slate-900 hover:bg-slate-800 text-white font-medium rounded-sm shadow-sm text-sm tracking-wide"
+                                type="submit"
+                                disabled={isSubmitting || !isValid}
+                                className="w-full h-12 bg-slate-900 hover:bg-slate-800 text-white font-medium rounded-sm shadow-sm text-sm tracking-wide disabled:opacity-80 disabled:cursor-not-allowed"
                             >
-                                Submit Reserve Slot Request
+                                {isSubmitting ? "Submitting..." : "Submit Reserve Slot Request"}
                             </Button>
                             
                              <div className="text-[10px] text-slate-500 text-center leading-relaxed px-2 bg-slate-50 py-2 rounded border border-slate-100">
@@ -314,22 +401,37 @@ export default function PartnerProofHub() {
                             </div>
                         </div>
                     </Card>
-                </>
+                </form>
             ) : (
                 <div className="max-w-xl mx-auto text-center space-y-6 pt-8">
                      <div className="w-16 h-16 bg-emerald-50 rounded-full flex items-center justify-center mx-auto mb-6">
                         <CheckCircle2 className="w-8 h-8 text-emerald-600" />
                      </div>
                      <div className="space-y-2">
-                        <h2 className="text-xl font-semibold text-slate-900">Request Generated</h2>
+                        <h2 className="text-xl font-semibold text-slate-900">Request Received</h2>
                         <p className="text-slate-500 text-sm max-w-sm mx-auto">
-                            Your capacity reservation request has been routed to our procurement team. An order form will be sent to the provided email addresses.
+                            Request received. Procurement will email you.
                         </p>
+                        <div className="text-left max-w-md mx-auto bg-slate-50 border border-slate-200 rounded-sm p-4 text-xs text-slate-700 space-y-1">
+                          {requestId && (
+                            <div><span className="font-semibold text-slate-900">Request ID:</span> {requestId}</div>
+                          )}
+                          {submittedEmails && (
+                            <>
+                              <div><span className="font-semibold text-slate-900">Compliance Email:</span> {submittedEmails.compliance}</div>
+                              <div><span className="font-semibold text-slate-900">Infra Email:</span> {submittedEmails.infra}</div>
+                            </>
+                          )}
+                        </div>
                      </div>
                      <div className="pt-4">
                         <Button 
                             variant="outline"
-                            onClick={() => setIsSubmitted(false)}
+                            onClick={() => {
+                              setIsSubmitted(false);
+                              setRequestId(null);
+                              setSubmittedEmails(null);
+                            }}
                             className="border-slate-200 text-slate-600 hover:text-slate-900"
                         >
                             Return to Proof Hub
