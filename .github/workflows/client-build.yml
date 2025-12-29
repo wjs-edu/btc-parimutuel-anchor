@@ -1,0 +1,32 @@
+name: Client Build
+
+on:
+  pull_request:
+    branches: [ main ]
+    paths:
+      - btc_parimutuel/client/**
+      - btc_parimutuel/tools/verifier-server.js
+      - .github/workflows/client-build.yml
+
+jobs:
+  client-build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install Yarn 1.22.22
+        run: |
+          npm i -g yarn@1.22.22
+          yarn --version
+
+      - name: Install dependencies
+        run: yarn --cwd btc_parimutuel/client install --frozen-lockfile
+
+      - name: Build
+        run: yarn --cwd btc_parimutuel/client build
