@@ -1,0 +1,9 @@
+
+Program Id: QvRjL6RbUCg1pCxskrxBpiuoJ94iEghWddwYipjAQpz
+Owner: BPFLoaderUpgradeab1e11111111111111111111111
+ProgramData Address: FrnTkpe4epDURJoehuzPJdUcfYys6FAMCuDzpmcNcX3k
+Authority: 8NLo9FC39tmU4hhzD6gh6VRaV6spNvF1pGmKRdiPDgG6
+Last Deployed In Slot: 429658213
+Data Length: 458920 (0x700a8) bytes
+Balance: 3.19528728 SOL
+
