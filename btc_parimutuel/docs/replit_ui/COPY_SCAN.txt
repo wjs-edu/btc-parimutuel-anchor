@@ -1,0 +1,59 @@
+COPY SAFETY SCAN - PASS-ONLY
+============================
+Timestamp: 2025-12-29
+Target: client/src
+Keywords: (odds|pnl|profit|trading|betting|wager|execute|execution|custody|private key|keys)
+
+SUMMARY
+-------
+Total Matches: 13
+Violations: 0
+Status: CLEAN
+
+DETAILED ANALYSIS
+-----------------
+
+1. client/src/pages/PartnerProofHub.tsx
+   - Line 118: "CommitClose never receives signing keys..."
+     [ALLOWED] Negative assertion (Security).
+   - Line 152: "Partner retains custody..."
+     [ALLOWED] Delegation assertion (Role clarity).
+   - Line 160: "CommitClose never receives signing keys..."
+     [ALLOWED] Negative assertion (Security).
+   - Line 168: "...does not participate in execution, custody..."
+     [ALLOWED] Negative assertion (Scope limit).
+   - Line 260: "...reserves execution capacity."
+     [ALLOWED] Technical capacity definition.
+   - Line 263: "...no custody, trading, or customer funds risk."
+     [ALLOWED] Negative assertion (Risk disclaimer).
+   - Line 365: "Excluded... Execution or trading operations"
+     [ALLOWED] Scope exclusion list.
+
+2. client/src/pages/RestrictedRegion.tsx
+   - Line 48: "Partner retains custody... CommitClose never receives signing keys..."
+     [ALLOWED] Delegation & Negative assertion.
+
+3. client/src/pages/USGated.tsx
+   - Line 19: "...partner platforms that handle execution and custody."
+     [ALLOWED] Delegation assertion.
+
+4. client/src/pages/PartnerHub.tsx
+   - Line 142: "Execution and custody are handled by a regulated partner."
+     [ALLOWED] Delegation assertion.
+
+5. client/src/components/Layout.tsx
+   - Line 21: "Production execution occurs on mainnet..."
+     [ALLOWED] Technical protocol state description.
+   - Line 94: "Production execution occurs on mainnet..."
+     [ALLOWED] Technical protocol state description.
+
+VERDICT
+-------
+No "GTM Drift" detected.
+- Zero instances of: odds, pnl, profit, betting, wager.
+- All instances of "trading", "execution", "custody" are used in:
+  a) Negative assertions ("we do not...")
+  b) Partner delegations ("partner handles...")
+  c) Technical contexts ("mainnet execution")
+
+The copy is compliant with "Technology Provider" status.
