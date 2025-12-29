@@ -77,7 +77,7 @@ To verify that the SPA works correctly when served from a static server with dee
 
 ### 1. Build the Application
 ```bash
-npx vite build --outDir btc_parimutuel/client/dist --emptyOutDir
+(cd btc_parimutuel/client && npx vite build --outDir dist --emptyOutDir)
 ```
 
 ### 2. Create a Minimal Production Server

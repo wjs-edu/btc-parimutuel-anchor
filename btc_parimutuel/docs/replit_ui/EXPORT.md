@@ -4,10 +4,10 @@ This project is prepared for static deployment (frontend only).
 
 ## 1. Build Command
 
-To build **only** the static frontend (skipping the Node.js server build) and output to btc_parimutuel/btc_parimutuel/client/dist` as requested:
+To build **only** the static frontend (skipping the Node.js server build) and output to btc_parimutuel/client/dist` as requested:
 
 ```bash
-npx vite build --outDir btc_parimutuel/client/dist --emptyOutDir
+(cd btc_parimutuel/client && npx vite build --outDir dist --emptyOutDir)
 ```
 
 ## 2. Output Location
@@ -15,7 +15,7 @@ npx vite build --outDir btc_parimutuel/client/dist --emptyOutDir
 The static build artifacts will be located in:
 
 ```
-btc_parimutuel/btc_parimutuel/client/dist/
+btc_parimutuel/client/dist/
 ```
 
 This folder contains `index.html` and `assets/`. This is the folder you should deploy to your static hosting provider (Cloudflare Pages, Vercel, Netlify, DigitalOcean App Platform Static Site).
@@ -26,10 +26,10 @@ To test the static build locally using a simple static server:
 
 ```bash
 # 1. Build
-npx vite build --outDir btc_parimutuel/client/dist --emptyOutDir
+(cd btc_parimutuel/client && npx vite build --outDir dist --emptyOutDir)
 
 # 2. Serve
-npx servebtc_parimutuel/btc_parimutuel/client/dist
+npx servebtc_parimutuel/client/dist
 ```
 
 Navigate to `http://localhost:3000` (or the port shown) to verify.
