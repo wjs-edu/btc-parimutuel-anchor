@@ -3,7 +3,7 @@ set -euo pipefail
 
 BASE_URL="${BASE_URL:-http://localhost:8787}"
 ID="1766716704"
-PROGRAM_ID="QvRjL6RbUCg1pCxskrxBpiuoJ94iEghWddwYipjAQpz"
+PROGRAM_ID="328SxemHPfb2Y2pBeH5FgZfP3dtquXUhTCYQ7L2XDf4r"
 
 echo "Checking golden demo status endpoint..."
 

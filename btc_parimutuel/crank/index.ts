@@ -1,7 +1,9 @@
 async function rpcRetry<T>(fn:()=>Promise<T>, label:string, tries=5){
   for(let i=0;i<tries;i++){
     try{ return await fn(); }catch(e:any){
-      console.error(`[${label}] attempt ${i+1}/${tries} failed:`, (e?.message||e));
+      console.error(`[] attempt / failed:`, (e?.message||e));
+      const msg=String(e?.message||e);
+      if(msg.includes("AccountNotInitialized")||msg.includes("InstructionFallbackNotFound")||msg.includes("AccountDiscriminatorMismatch")) throw e;
       if(i===tries-1) throw e;
       await new Promise(r=>setTimeout(r, 500*(i+1)));
     }
@@ -16,8 +18,8 @@ import * as anchor from "@coral-xyz/anchor";
 import { Program } from "@coral-xyz/anchor";
 import { BN } from "bn.js";
 import { PublicKey, SystemProgram } from "@solana/web3.js";
-import { createMint, getOrCreateAssociatedTokenAccount, mintTo, TOKEN_PROGRAM_ID } from "@solana/spl-token";
-const PROGRAM_ID = new anchor.web3.PublicKey(process.env.CRANK_PROGRAM_ID || "QvRjL6RbUCg1pCxskrxBpiuoJ94iEghWddwYipjAQpz");
+import { TOKEN_PROGRAM_ID, ASSOCIATED_TOKEN_PROGRAM_ID, getAssociatedTokenAddressSync, createMint, getOrCreateAssociatedTokenAccount, mintTo } from "@solana/spl-token";
+const PROGRAM_ID = new anchor.web3.PublicKey(process.env.CRANK_PROGRAM_ID || "328SxemHPfb2Y2pBeH5FgZfP3dtquXUhTCYQ7L2XDf4r");
 function sha256Hex(s:string){ return crypto.createHash("sha256").update(s,"utf8").digest("hex"); }
 function sortKeys(x:any):any{
   if(x===null||x===undefined) return null;
@@ -55,12 +57,80 @@ async function main(){
   const provider=anchor.AnchorProvider.env(); anchor.setProvider(provider);
   (provider as any).publicKey = provider.wallet.publicKey;
   console.log('Provider publicKey:', (provider as any).publicKey?.toBase58?.() || String((provider as any).publicKey));
-  const normalizeIdl=(idl:any)=>{ if(!idl.name&&idl.metadata?.name) idl.name=idl.metadata.name; idl.metadata=idl.metadata||{}; if(!idl.metadata.address&&idl.address) idl.metadata.address=idl.address; if(Array.isArray(idl.accounts)) for(const x of idl.accounts){ if(x&&x.size===undefined) x.size=0; if(x&&x.type===undefined) x.type={kind:"struct",fields:[]}; } idl.accounts=[]; return idl; };
-const idlRaw=(await Program.fetchIdl(PROGRAM_ID as any, provider as any)) ?? normalizeIdl(loadIdl());
-  const idl=normalizeIdl(idlRaw); idl.accounts=[]; const coder = new (anchor as any).BorshCoder(idl);
-  const program=new Program(idl as any, PROGRAM_ID as any, provider as any);
-  (program.provider as any).publicKey = provider.wallet.publicKey;
-  const programId = program.programId as unknown as PublicKey;
+  const normalizeIdl=(idl:any)=>{
+  if(!idl.name&&idl.metadata?.name) idl.name=idl.metadata.name;
+  idl.metadata=idl.metadata||{};
+  if(!idl.metadata.address&&idl.address) idl.metadata.address=idl.address;
+
+  // CRITICAL: Anchor Program build will crash if idl.accounts contains undefined entries
+  if(Array.isArray(idl.accounts)){
+    idl.accounts = idl.accounts.filter(Boolean).map((x:any)=>{
+      if(x.size===undefined) x.size=0;
+      if(x.type===undefined) x.type={kind:"struct",fields:[]};
+      return x;
+    });
+  } else {
+    idl.accounts = [];
+  }
+  return idl;
+};
+const idlRaw = loadIdl();
+  const idl=normalizeIdl(idlRaw); const coder = new (anchor as any).BorshCoder(idl);
+
+// --- vFinal deterministic helpers (no program.methods / no program.account.fetch) ---
+
+function ixData(coder: anchor.BorshCoder, name: string, args: any) {
+  return coder.instruction.encode(name, args);
+}
+
+function toPubkey(x:any){
+  if(!x) throw new Error("toPubkey: empty");
+  if(x instanceof PublicKey) return x;
+  if(typeof x==="string") return new PublicKey(x.trim());
+  if(typeof x.toBase58==="function") return new PublicKey(x.toBase58());
+  if(x?.data && Array.isArray(x.data)) return new PublicKey(Uint8Array.from(x.data));
+  if(x instanceof Uint8Array || Buffer.isBuffer(x)) return new PublicKey(x);
+  throw new Error("toPubkey: unsupported " + Object.prototype.toString.call(x));
+}
+
+async function fetchVfinalMarketDecoded(opts: {
+  connection: anchor.web3.Connection;
+  coder: anchor.BorshCoder;
+  marketPda: PublicKey;
+}): Promise<any> {
+  const info = await opts.connection.getAccountInfo(opts.marketPda, "confirmed");
+  if (!info?.data) throw new Error("Market PDA not found: " + opts.marketPda.toBase58());
+  return opts.coder.accounts.decode("VFinalMarket", info.data);
+}
+
+async function sendIx(opts: {
+  provider: anchor.AnchorProvider;
+  programId: PublicKey;
+  keys: { pubkey: PublicKey; isSigner: boolean; isWritable: boolean }[];
+  data: Buffer;
+  label: string;
+}) {
+  const ix = new anchor.web3.TransactionInstruction({
+    programId: opts.programId,
+    keys: opts.keys,
+    data: opts.data,
+  });
+  return rpcRetry(
+    () =>
+      opts.provider.sendAndConfirm(new anchor.web3.Transaction().add(ix), [], {
+        commitment: "confirmed",
+      }),
+    opts.label
+  );
+}
+
+  const programId = PROGRAM_ID as unknown as PublicKey;
+  let program: any = null;
+  // For lifecycle commands we do NOT need Anchor Program; we use coder+sendIx+explicit PDAs.
+  // Anchor Program constructor is brittle with some IDL account metadata.
+  if (cmd === "refund") {
+    (program.provider as any).publicKey = provider.wallet.publicKey;
+  }
   if(cmd==="commit"){ mid=String(args[args.indexOf("--market-id")+1]||""); if(!mid){ usage(); process.exit(1); }
     const side=parseInt((args[args.indexOf("--side")+1]||"1"),10); const amt=new BN(args[args.indexOf("--amount")+1]||"1000000");
     const { usdcMint, userAta } = await loadOrCreateUsdc(provider, mid); const pdas=deriveCommitPdas(programId, mid, provider.wallet.publicKey);
@@ -83,15 +153,22 @@ const idlRaw=(await Program.fetchIdl(PROGRAM_ID as any, provider as any)) ?? nor
     ], data });
     const sig=await rpcRetry(()=> provider.sendAndConfirm(new anchor.web3.Transaction().add(ix), [], {commitment:"confirmed"}), "commit");
     console.log("Commit sig:", sig); writeEvidenceCommit(mid, sig); return; }
-    await writeSnapshots(program as any, programId, mid, provider.wallet.publicKey);
+    if(program) await writeSnapshots(program as any, programId, mid, provider.wallet.publicKey);
   if(cmd==="settle"){ mid=String(args[args.indexOf("--market-id")+1]||""); if(!mid){ usage(); process.exit(1); }
     const wait=args.includes("--wait"); const pdas=deriveCommitPdas(programId, mid, provider.wallet.publicKey);
-    if(wait){ const mkt:any=await (program as any).account.vFinalMarket.fetch(pdas.marketPda); const close=parseInt(mkt.commitCloseTs.toString(),10);
+    if(wait){ const mkt:any=await fetchVfinalMarketDecoded({ connection: provider.connection, coder, marketPda: pdas.marketPda });
+      const closeRaw:any = (mkt.commitCloseTs ?? mkt.commit_close_ts);
+      if(!closeRaw) throw new Error("commitCloseTs missing on VFinalMarket; keys=" + Object.keys(mkt).join(","));
+      const close=parseInt(closeRaw.toString(),10);
       const slot=await provider.connection.getSlot("confirmed"); const now=(await provider.connection.getBlockTime(slot)) ?? Math.floor(Date.now()/1000);
       const s=Math.max(0, close-now+2); if(s>0) await new Promise(r=>setTimeout(r,s*1000)); }
-    const sig=await rpcRetry(() => (program as any).methods.settleCommitCloseVfinal(new BN(mid)).accounts({ market: pdas.marketPda, commitPool: pdas.commitPoolPda }).rpc({commitment:"confirmed"}), "settle");
+    const data = ixData(coder, "settle_commit_close_vfinal", { _market_id: new BN(mid) });
+    const sig = await sendIx({ provider, programId, label: "settle", keys: [
+      { pubkey: pdas.marketPda, isSigner: false, isWritable: true },
+      { pubkey: pdas.commitPoolPda, isSigner: false, isWritable: true },
+    ], data });
     console.log("Settle sig:", sig); writeEvidenceSettle(mid, String(sig)); return; }
-    await writeSnapshots(program as any, programId, mid, provider.wallet.publicKey);
+    if(program) await writeSnapshots(program as any, programId, mid, provider.wallet.publicKey);
   if(cmd==="refund"){ mid=String(args[args.indexOf("--market-id")+1]||""); if(!mid){ usage(); process.exit(1); }
     const { userAta }=await loadOrCreateUsdc(provider, mid); const pdas=deriveCommitPdas(programId, mid, provider.wallet.publicKey);
     let sig:any=null;
@@ -102,28 +179,57 @@ const idlRaw=(await Program.fetchIdl(PROGRAM_ID as any, provider as any)) ?? nor
       const msg=String(e?.message||e); if(!msg.includes("NoCommitment")) throw e;
       console.log("Refund: already refunded (NoCommitment) — continuing to snapshots");
     }
-    await writeSnapshots(program as any, programId, mid, provider.wallet.publicKey); return; }
-    await writeSnapshots(program as any, programId, mid, provider.wallet.publicKey);
+    if(program) await writeSnapshots(program as any, programId, mid, provider.wallet.publicKey); return; }
+    if(program) await writeSnapshots(program as any, programId, mid, provider.wallet.publicKey);
   if(cmd==="init_receipt"){ mid=String(args[args.indexOf("--market-id")+1]||""); if(!mid){ usage(); process.exit(1); }
     const pdas=deriveCommitPdas(programId, mid, provider.wallet.publicKey);
     const receipt=PublicKey.findProgramAddressSync([Buffer.from("receipt_v1"), pdas.marketPda.toBuffer(), provider.wallet.publicKey.toBuffer()], programId)[0];
-    const sig=await rpcRetry(()=> (program as any).methods.initReceiptV1(new BN(mid)).accounts({ user:provider.wallet.publicKey, market:pdas.marketPda, receipt, systemProgram:SystemProgram.programId }).rpc({commitment:"confirmed"}),"init_receipt");
-    console.log("InitReceipt sig:",sig); writeEvidenceInitReceipt(mid,String(sig)); await writeSnapshots(program as any, programId, mid, provider.wallet.publicKey); return; }
+    const disc=crypto.createHash("sha256").update("global:init_receipt_v1","utf8").digest().subarray(0,8);
+    const data=Buffer.concat([disc, u64le(mid), Buffer.from([0])]);
+    console.log("init_receipt data len", data.length, "hex", data.toString("hex"));
+    const sig = await sendIx({ provider, programId, label: "init_receipt", keys: [
+      { pubkey: provider.wallet.publicKey, isSigner: true, isWritable: false },
+      { pubkey: pdas.marketPda, isSigner: false, isWritable: false },
+      { pubkey: receipt, isSigner: false, isWritable: true },
+      { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
+    ], data });
+    console.log("InitReceipt sig:",sig); writeEvidenceInitReceipt(mid,String(sig)); if(program) await writeSnapshots(program as any, programId, mid, provider.wallet.publicKey); return; }
   if(cmd==="resolve"){ mid=String(args[args.indexOf("--market-id")+1]||""); if(!mid){ usage(); process.exit(1); }
     const side=parseInt((args[args.indexOf("--winning-side")+1]||"1"),10);
     const pdas=deriveCommitPdas(programId, mid, provider.wallet.publicKey);
-    const sig=await rpcRetry(()=> (program as any).methods.resolveMarketVfinal(new BN(mid), side).accounts({ admin:provider.wallet.publicKey, market:pdas.marketPda, commitPool:pdas.commitPoolPda }).rpc({commitment:"confirmed"}),"resolve");
-    console.log("Resolve sig:",sig); writeEvidenceResolve(mid,String(sig)); await writeSnapshots(program as any, programId, mid, provider.wallet.publicKey); return; }
+    const data = ixData(coder, "resolve_market_vfinal", { _market_id: new BN(mid), winning_side: Number(side) });
+    const sig = await sendIx({ provider, programId, label: "resolve", keys: [
+      { pubkey: provider.wallet.publicKey, isSigner: true, isWritable: false },
+      { pubkey: pdas.marketPda, isSigner: false, isWritable: true },
+      { pubkey: pdas.commitPoolPda, isSigner: false, isWritable: true },
+    ], data });
+    console.log("Resolve sig:",sig); writeEvidenceResolve(mid,String(sig)); if(program) await writeSnapshots(program as any, programId, mid, provider.wallet.publicKey); return; }
   if(cmd==="claim"){ mid=String(args[args.indexOf("--market-id")+1]||""); if(!mid){ usage(); process.exit(1); }
     const pdas=deriveCommitPdas(programId, mid, provider.wallet.publicKey);
     const receipt=PublicKey.findProgramAddressSync([Buffer.from("receipt_v1"), pdas.marketPda.toBuffer(), provider.wallet.publicKey.toBuffer()], programId)[0];
-    const { userAta }=await loadOrCreateUsdc(provider, mid);
-    const sig=await rpcRetry(()=> (program as any).methods.claimPayoutVfinal(new BN(mid)).accounts({ user:provider.wallet.publicKey, market:pdas.marketPda, commitPool:pdas.commitPoolPda, commitVault:pdas.commitVaultPda, commitment:pdas.commitmentPda, userUsdcAta:userAta, receipt, tokenProgram:TOKEN_PROGRAM_ID }).rpc({commitment:"confirmed"}),"claim");
-    console.log("Claim sig:",sig); writeEvidenceClaim(mid,String(sig)); await writeSnapshots(program as any, programId, mid, provider.wallet.publicKey); return; }
+    const mkt:any = await fetchVfinalMarketDecoded({ connection: provider.connection, coder, marketPda: pdas.marketPda });
+    const envMint=(process.env.CRANK_USDC_MINT||"").trim();
+      const fileMint=fs.readFileSync(path.join("evidence", mid, "usdc_mint.txt"),"utf8").trim();
+      const mintSrc=envMint||fileMint;
+      console.log("[claim] mintSrc=", mintSrc);
+      const usdcMint = new PublicKey(mintSrc);
+    const userUsdcAta = getAssociatedTokenAddressSync(usdcMint, provider.wallet.publicKey, false, TOKEN_PROGRAM_ID, ASSOCIATED_TOKEN_PROGRAM_ID);
+    const data = ixData(coder, "claim_payout_vfinal", { _market_id: new BN(mid) });
+    const sig = await sendIx({ provider, programId, label: "claim", keys: [
+      { pubkey: provider.wallet.publicKey, isSigner: true, isWritable: false },
+      { pubkey: pdas.marketPda, isSigner: false, isWritable: true },
+      { pubkey: pdas.commitPoolPda, isSigner: false, isWritable: true },
+      { pubkey: pdas.commitVaultPda, isSigner: false, isWritable: true },
+      { pubkey: pdas.commitmentPda, isSigner: false, isWritable: true },
+      { pubkey: userUsdcAta, isSigner: false, isWritable: true },
+      { pubkey: receipt, isSigner: false, isWritable: true },
+      { pubkey: TOKEN_PROGRAM_ID, isSigner: false, isWritable: false },
+    ], data });
+    console.log("Claim sig:",sig); writeEvidenceClaim(mid,String(sig)); if(program) await writeSnapshots(program as any, programId, mid, provider.wallet.publicKey); return; }
   const mi=args.indexOf("--market"); const marketPath=(mi!==-1 && args[mi+1])?args[mi+1]:""; if(!marketPath){ usage(); process.exit(1); }
   const raw=fs.readFileSync(marketPath,"utf8"); const paramsHash=sha256Hex(canonicalizeParams(raw));
   console.log("Crank Runner v0"); console.log("Market file:", marketPath); console.log("Params Hash:", paramsHash);
-  console.log("Program ID:", program.programId.toBase58()); const m:any=JSON.parse(raw);
+  console.log("Program ID:", programId.toBase58()); const m:any=JSON.parse(raw);
   const marketIdStr=(m.market_id ?? Math.floor(Date.now()/1000)).toString(); const now=Math.floor(Date.now()/1000);
   mid = marketIdStr;
   const closeInSec=(args.includes("--close-in-sec")?parseInt(args[args.indexOf("--close-in-sec")+1],10):null);
@@ -145,7 +251,7 @@ const idlRaw=(await Program.fetchIdl(PROGRAM_ID as any, provider as any)) ?? nor
   ], data });
   const sig=await rpcRetry(()=> provider.sendAndConfirm(new anchor.web3.Transaction().add(ix), [], {commitment:"confirmed"}), "publish");
   console.log("Publish sig:", sig); writeEvidencePublished(marketIdStr, paramsHash, raw, sig);
-  await writeSnapshots(program as any, programId, marketIdStr, provider.wallet.publicKey);
+  if(program) await writeSnapshots(program as any, programId, marketIdStr, provider.wallet.publicKey);
 }
 main().catch(e=>{ console.error(e); process.exit(1); });
 function u64le(n: string){
@@ -165,16 +271,20 @@ async function loadOrCreateUsdc(provider: anchor.AnchorProvider, marketIdStr: st
   const ataPath=path.join(d,`user_ata_${owner.toBase58()}.txt`);
 
   const payer=(provider.wallet as any).payer;
+    const envMint = (process.env.CRANK_USDC_MINT || "").trim();
   const conn=provider.connection;
 
-  // 1) Mint is per-market. Create once, then reuse forever.
-  let usdcMint: PublicKey;
-  if(fs.existsSync(mintPath)){
-    usdcMint = new PublicKey(fs.readFileSync(mintPath,"utf8").trim());
-  }else{
-    usdcMint = await createMint(conn, payer, owner, null, 6);
-    fs.writeFileSync(mintPath, usdcMint.toBase58()+"\n");
-  }
+    // 1) Mint selection (CRANK_USDC_MINT override supported)
+    let usdcMint: PublicKey;
+    if(envMint){
+      usdcMint = new PublicKey(envMint);
+      fs.writeFileSync(mintPath, usdcMint.toBase58()+"\n");
+    } else if(fs.existsSync(mintPath)){
+      usdcMint = new PublicKey(fs.readFileSync(mintPath,"utf8").trim());
+    } else {
+      usdcMint = await createMint(conn, payer, owner, null, 6);
+      fs.writeFileSync(mintPath, usdcMint.toBase58()+"\n");
+    }
 
   // 2) ATA is per-wallet for that mint.
   const ata = await getOrCreateAssociatedTokenAccount(conn, payer, usdcMint, owner);
