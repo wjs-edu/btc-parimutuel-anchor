@@ -45,3 +45,7 @@ scripts/deploy-devnet.sh
 scripts/fund-demo-wallets.sh
 scripts/fund_demo_wallets.js
 scripts/preflight-funding.sh
+
+# generated artifacts (PASS)
+/artifacts/
+/artifacts/**
