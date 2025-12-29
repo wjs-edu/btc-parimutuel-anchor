@@ -10,9 +10,9 @@ on:
       - Anchor.toml
       - Cargo.toml
       - Cargo.lock
-      - .github/workflows/devnet-green.yml
   push:
     branches: [ main ]
+  workflow_dispatch:
 
 jobs:
   devnet-green:
