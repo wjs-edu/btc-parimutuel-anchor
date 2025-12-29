@@ -97,6 +97,16 @@ jobs:
           set -euo pipefail
           yarn install --frozen-lockfile
 
+      - name: Client install
+        run: |
+          set -euo pipefail
+          yarn --cwd btc_parimutuel/client install --frozen-lockfile
+
+      - name: Client build
+        run: |
+          set -euo pipefail
+          yarn --cwd btc_parimutuel/client build
+
       - name: Fetch IDL from devnet (no-build CI)
         run: |
           set -euo pipefail
