@@ -6,7 +6,6 @@ on:
     paths:
       - btc_parimutuel/client/**
       - btc_parimutuel/tools/verifier-server.js
-      - .github/workflows/client-build.yml
 
 jobs:
   client-build:
