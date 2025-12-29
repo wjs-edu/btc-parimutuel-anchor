@@ -3,7 +3,7 @@
 This document defines the exact artifacts required to deploy the "CommitClose Partner Proof Hub" (Pilot UI).
 
 ## 1. Build Output
-The canonical build output is located in `client/dist/`.
+The canonical build output is located in btc_parimutuel/btc_parimutuel/client/dist/`.
 This folder contains the fully compiled, static Single Page Application (SPA).
 
 - **Type**: Static HTML/CSS/JS (SPA)
@@ -34,6 +34,6 @@ This folder contains the fully compiled, static Single Page Application (SPA).
 ## 4. Canonical Repo Integration
 When merging this export into the canonical repository:
 
-1. Copy the contents of `client/dist/` to the repo's public web folder (e.g., `public/` or `www/`).
+1. Copy the contents of btc_parimutuel/btc_parimutuel/client/dist/` to the repo's public web folder (e.g., `public/` or `www/`).
 2. Ensure no existing files overwrite `index.html` unless intentional.
 3. Commit the artifacts to ensure the deployed version is immutable and version-controlled.

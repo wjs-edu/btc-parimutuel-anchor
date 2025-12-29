@@ -4,10 +4,10 @@ This project is prepared for static deployment (frontend only).
 
 ## 1. Build Command
 
-To build **only** the static frontend (skipping the Node.js server build) and output to `client/dist` as requested:
+To build **only** the static frontend (skipping the Node.js server build) and output to btc_parimutuel/btc_parimutuel/client/dist` as requested:
 
 ```bash
-npx vite build --outDir dist --emptyOutDir
+npx vite build --outDir btc_parimutuel/client/dist --emptyOutDir
 ```
 
 ## 2. Output Location
@@ -15,7 +15,7 @@ npx vite build --outDir dist --emptyOutDir
 The static build artifacts will be located in:
 
 ```
-client/dist/
+btc_parimutuel/btc_parimutuel/client/dist/
 ```
 
 This folder contains `index.html` and `assets/`. This is the folder you should deploy to your static hosting provider (Cloudflare Pages, Vercel, Netlify, DigitalOcean App Platform Static Site).
@@ -26,10 +26,10 @@ To test the static build locally using a simple static server:
 
 ```bash
 # 1. Build
-npx vite build --outDir dist --emptyOutDir
+npx vite build --outDir btc_parimutuel/client/dist --emptyOutDir
 
 # 2. Serve
-npx serve client/dist
+npx servebtc_parimutuel/btc_parimutuel/client/dist
 ```
 
 Navigate to `http://localhost:3000` (or the port shown) to verify.
@@ -51,7 +51,7 @@ This UI is designed to be served from `proof.commitclose.com`.
 
 This build includes a visible version stamp in the footer. To update the version before building:
 
-1. Edit `client/src/lib/buildInfo.ts`
+1. Edit `btc_parimutuel/client/src/lib/buildInfo.ts`
 2. Update the `BUILD_VERSION` and `BUILD_DATE` constants.
 
 See `VERSIONING.md` for more details on automated version injection.
