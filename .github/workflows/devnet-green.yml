@@ -3,8 +3,16 @@ name: Devnet Green (vFinal A1-A5)
 on:
   pull_request:
     branches: [ main ]
+    paths:
+      - programs/**
+      - btc_parimutuel/tests/**
+      - btc_parimutuel/idl/**
+      - Anchor.toml
+      - Cargo.toml
+      - Cargo.lock
   push:
     branches: [ main ]
+  workflow_dispatch:
 
 jobs:
   devnet-green:
