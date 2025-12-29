@@ -28,6 +28,47 @@ http.createServer((req,res)=>{
   const p=u.parse(req.url).pathname||"/";
   const m=p.match(/^\/(status|verify\/resolved|verify\/canceled)\/(\d+)(?:\.json)?$/);
 
+  if(req.method==="POST" && p==="/intake/reserve-slot"){
+    let body="";
+    req.on("data",chunk=>{body+=chunk;});
+    req.on("end",()=>{
+      let payload;
+      try{
+        payload=JSON.parse(body||"{}");
+      }catch(_){
+        return send(res,400,"application/json",JSON.stringify({ok:false,error:"invalid_json"}));
+      }
+      const need=["tier_usd","company_legal","target_start_week","non_us_confirmed","compliance_email","infra_email","source_mid"];
+      const missing=need.filter(k=>payload[k]===undefined||payload[k]===null||(typeof payload[k]==="string"&&payload[k].trim()===""));
+      if(missing.length>0) return send(res,400,"application/json",JSON.stringify({ok:false,error:"missing_fields"}));
+      if(payload.non_us_confirmed!==true) return send(res,400,"application/json",JSON.stringify({ok:false,error:"non_us_confirmation_required"}));
+      const allowedTiers=new Set([25000,50000,75000]);
+      const tier=Number(payload.tier_usd);
+      if(!allowedTiers.has(tier)) return send(res,400,"application/json",JSON.stringify({ok:false,error:"invalid_tier_usd"}));
+      const request_id=`rs_${Date.now()}_${Math.floor(Math.random()*1e6)}`;
+      const received_utc=new Date().toISOString();
+      const record={
+        request_id,
+        tier_usd:tier,
+        company_legal:String(payload.company_legal).trim(),
+        target_start_week:String(payload.target_start_week).trim(),
+        non_us_confirmed:true,
+        compliance_email:String(payload.compliance_email).trim(),
+        infra_email:String(payload.infra_email).trim(),
+        source_mid:String(payload.source_mid).trim(),
+        ip:req.socket.remoteAddress||"",
+        user_agent:req.headers["user-agent"]||"",
+        received_utc
+      };
+      const dir=path.join(root,"artifacts","intake");
+      fs.mkdirSync(dir,{recursive:true});
+      const dest=path.join(dir,"reserve_slot_requests.jsonl");
+      fs.appendFileSync(dest,JSON.stringify(record)+"\n");
+      return send(res,200,"application/json",JSON.stringify({ok:true,request_id,received_utc}));
+    });
+    return;
+  }
+
   if(m){
     const kind=m[1], id=m[2], isJson=p.endsWith(".json");
     if(kind==="status" && !isJson){
