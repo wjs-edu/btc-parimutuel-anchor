@@ -1,8 +1,9 @@
 const http=require("http"),fs=require("fs"),path=require("path"),u=require("url");
-const root=process.cwd(), esc=s=>String(s).replace(/[&<>"]/g,c=>({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;" }[c]));
+const root=require("path").resolve(__dirname,"../..");
+const esc=s=>String(s).replace(/[&<>"]/g,c=>({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;" }[c]));
 const tx=s=>`https://explorer.solana.com/tx/${s}?cluster=devnet`;
 const send=(res,code,ct,body)=>{res.writeHead(code,{"content-type":ct});res.end(body);};
-const distDir=path.join(root,"client","dist");
+const distDir=path.join(root,"btc_parimutuel","client","dist");
 const indexHtml=path.join(distDir,"index.html");
 const readIfFile=fp=>{
   try{
@@ -98,7 +99,7 @@ http.createServer((req,res)=>{
   }
 
   if(req.method==="GET"){
-    const cleanPath=p.replace(/^\\/+/, "");
+    const cleanPath=p.replace(/^\/+/, "");
     if(cleanPath){
       const target=path.normalize(cleanPath);
       const fp=path.join(distDir,target);
@@ -109,7 +110,7 @@ http.createServer((req,res)=>{
     }
   }
 
-  if(/^\\/((proof|status)\\/\\d+)$/.test(p)){
+    if(/^\/(proof|status)\/\d+$/.test(p)){
     const body=readIfFile(indexHtml);
     if(body===null){
       return send(res,500,"text/plain","client build missing; cannot serve proof hub");
