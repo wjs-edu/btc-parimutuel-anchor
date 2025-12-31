@@ -80,7 +80,7 @@ http.createServer((req,res)=>{
       return send(res,200,"application/json",fs.readFileSync(fp));
     }else if(kind==="verify/canceled"){
       const dir=path.join(root,`artifacts/canceled/${id}`), need=["close.sig.txt","market.account.json"];
-      if(!need.every(f=>fs.existsSync(path.join(dir,f)))) return send(res,404,"text/plain","bundle not found");
+      if(!need.every(f=>fs.existsSync(path.join(dir,f)))) return send(res,200,"text/html; charset=utf-8",`<!doctype html><meta charset="utf-8"><title>Verify Canceled ${esc(id)}</title><h1>Verify: CANCELED Market ${esc(id)}</h1><p><b>Status:</b> No canceled proof bundle artifacts found for this MID.</p><ul><li>status JSON: <a href="/status/${esc(id)}.json">/status/${esc(id)}.json</a></li><li>resolved verifier: <a href="/verify/resolved/${esc(id)}">/verify/resolved/${esc(id)}</a></li></ul><p>This page intentionally returns 200 to avoid ambiguity.</p>`);
       const close=fs.readFileSync(path.join(dir,"close.sig.txt"),"utf8").trim();
       const market=fs.readFileSync(path.join(dir,"market.account.json"),"utf8");
       return send(res,200,"text/html; charset=utf-8",`<!doctype html><meta charset=\"utf-8\"><title>Verify Canceled ${esc(id)}</title><h1>Verify: CANCELED Market ${esc(id)}</h1><p><b>Proves:</b> deterministic on-chain application of rules (tx + account artifacts).</p><p><b>Does NOT prove:</b> oracle correctness or off-chain data sources.</p><ul><li>close_market (canceled): <a href=\"${tx(close)}\">${esc(close)}</a></li><li>status: <a href=\"/status/${esc(id)}.json\">/status/${esc(id)}.json</a></li></ul><h2>Market account snapshot</h2><pre style=\"white-space:pre-wrap\">${esc(market)}</pre>`);
