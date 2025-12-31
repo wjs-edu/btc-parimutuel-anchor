@@ -11,3 +11,10 @@ ci-devnet-keypair.json
 !btc_parimutuel/Cargo.lock
 .github/workflows/devnet-green.yml.bak.*
 node_modules/
+
+# VPS runtime / artifacts
+artifacts/
+btc_parimutuel/client/dist/
+commitclose-verifier.log
+btc_parimutuel/tools/verifier-server.js.bak.*
+artifacts_*.tgz
